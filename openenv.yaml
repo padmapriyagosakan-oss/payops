@@ -1,0 +1,53 @@
+spec_version: 1
+name: payops_env
+display_name: "PayOps — Payment Operations Incident Response"
+description: >
+  An AI agent acts as a Payment Operations analyst, reviewing financial 
+  transactions and deciding how to handle each one: approve, reject, flag, 
+  escalate, inspect, or hold. Tasks range from clear-cut fraud to subtle 
+  adversarial patterns like model poisoning and APP scams.
+type: space
+runtime: fastapi
+app: payops_env.server.app:app
+port: 7860
+version: "1.0.0"
+author: "PayOps Team"
+tags:
+  - finance
+  - fraud-detection
+  - compliance
+  - real-world
+  - payment-operations
+action_space:
+  type: discrete
+  actions:
+    - approve
+    - reject
+    - flag
+    - escalate
+    - inspect
+    - hold
+observation_space:
+  type: structured
+  fields:
+    - transaction_id
+    - amount
+    - currency
+    - sender
+    - receiver
+    - risk_score
+    - flags
+    - velocity_1h
+    - country_risk
+    - kyc_status
+tasks:
+  count: 12
+  difficulties:
+    - easy
+    - medium
+    - hard
+reward:
+  min: -1.0
+  max: 1.0
+  partial_credit: true
+

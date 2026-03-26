@@ -1,0 +1,278 @@
+# PayOps — Payment Operations Incident Response
+
+An **OpenEnv-compatible** reinforcement-learning environment where an AI agent
+acts as a Payment Operations analyst.  The agent reviews financial transactions
+one by one and must decide the correct compliance action for each.
+
+---
+
+## Motivation
+
+Payment operations teams process thousands of transactions every day.  A
+skilled analyst uses dozens of signals — risk scores, velocity, KYC status,
+flag patterns — to make fast, accurate decisions.  This environment lets an AI
+agent learn and be evaluated on exactly this task, spanning clear-cut cases all
+the way to subtle adversarial patterns like model-score poisoning and
+Authorised Push Payment (APP) scams.
+
+---
+
+## Environment Description
+
+Each **episode** steps through 12 transactions (4 easy, 4 medium, 4 hard).
+For each transaction the agent observes a rich set of signals and submits one
+of six possible actions.  A reward is returned immediately, and the next
+transaction is presented until the episode is complete.
+
+---
+
+## Action Space
+
+| Action       | Description |
+|-------------|-------------|
+| `approve`   | Mark transaction as legitimate; allow it through |
+| `reject`    | Block the transaction outright |
+| `flag`      | Soft hold; mark for manual review |
+| `escalate`  | Route to senior compliance officer / fraud team |
+| `inspect`   | Request additional signals (logs, KYC, velocity) — yields reveal notes and a small reward; agent then acts again on the same transaction |
+| `hold`      | Temporary hold pending more information |
+
+---
+
+## Observation Space
+
+| Field                 | Type           | Description |
+|----------------------|----------------|-------------|
+| `transaction_id`     | `str`          | Unique transaction identifier |
+| `amount`             | `float`        | Transaction amount |
+| `currency`           | `str`          | ISO-4217 currency code |
+| `sender`             | `str`          | Sender identifier |
+| `receiver`           | `str`          | Receiver identifier |
+| `transaction_type`   | `str`          | transfer \| payment \| withdrawal \| refund \| internal |
+| `status`             | `str`          | pending \| approved \| rejected \| flagged \| escalated \| held \| inspected |
+| `risk_score`         | `float [0,1]`  | Composite ML risk score |
+| `flags`              | `List[str]`    | Active risk flags |
+| `velocity_1h`        | `int?`         | Transactions from sender in the past hour |
+| `country_risk`       | `str?`         | low \| medium \| high \| sanctioned |
+| `kyc_status`         | `str?`         | verified \| pending \| failed \| none |
+| `previous_violations`| `int?`         | Prior compliance violations |
+| `inspection_notes`   | `str?`         | Extra details revealed after an `inspect` action |
+| `task_id`            | `str`          | Identifier of the active task |
+| `task_difficulty`    | `str`          | easy \| medium \| hard |
+| `step_in_episode`    | `int`          | Steps elapsed in this episode |
+| `reward`             | `float`        | Reward from the last action |
+| `cumulative_reward`  | `float`        | Total reward so far this episode |
+| `done`               | `bool`         | Whether the episode has ended |
+| `info`               | `dict`         | Diagnostic info (event, correct action, etc.) |
+
+---
+
+## Task Descriptions
+
+### Easy (4 tasks — clear signals)
+
+| ID        | Description | Correct Action |
+|----------|-------------|----------------|
+| EASY-001 | Low-value domestic transfer between verified users; no flags | `approve` |
+| EASY-002 | Textbook fraud: unknown sender, offshore, sanctioned country, risk=0.97 | `reject` |
+| EASY-003 | Standard refund to verified customer; tiny amount, no flags | `approve` |
+| EASY-004 | ATM withdrawal burst — 15 withdrawals in 58 minutes | `flag` |
+
+### Medium (4 tasks — ambiguous, multi-signal reasoning required)
+
+| ID       | Description | Correct Action |
+|---------|-------------|----------------|
+| MED-001 | Large B2B wire, verified CFO, cross-border to medium-risk jurisdiction | `escalate` |
+| MED-002 | Internal treasury transfer; large amount, KYC pending renewal | `hold` |
+| MED-003 | Recurring subscription 3× higher than historical average | `flag` |
+| MED-004 | Payment to licensed crypto exchange from verified personal account | `flag` |
+
+### Hard (4 tasks — adversarial / edge-case)
+
+| ID        | Description | Correct Action |
+|----------|-------------|----------------|
+| HARD-001 | Fraud model poisoning: risk_score=0.18 but manual signals scream escalate | `escalate` |
+| HARD-002 | APP (Authorised Push Payment) scam: victim sending willingly to mule account | `reject` |
+| HARD-003 | Structuring / smurfing: three just-below-CTR-threshold payments, same UBO | `reject` |
+| HARD-004 | Legitimate FX correspondent banking settlement — looks alarming, is not | `approve` |
+
+---
+
+## Reward Design
+
+| Outcome | Reward |
+|---------|--------|
+| Correct action | **+1.0** |
+| Partial-credit adjacent action (per-task) | **+0.2 – +0.6** |
+| `inspect` (information seeking, first time) | **+0.15** |
+| `approve` when correct is `reject` / `escalate` | **−1.0** |
+| `approve` when correct is `flag` / `hold` | **−0.5** |
+| `reject` when correct is `approve` | **−0.5** |
+| Any other wrong action | **−0.25** |
+
+The **episode score** (0–1) is: `max(0, total_reward) / max_possible_reward`.
+A score ≥ 0.5 is considered a passing episode.
+
+---
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/reset` | Reset environment, return first observation |
+| `POST` | `/step` | Execute an action |
+| `GET`  | `/state` | Current internal environment state |
+| `GET`  | `/schema` | JSON schemas for action / observation / state |
+| `GET`  | `/tasks` | Full task list with metadata |
+| `GET`  | `/grader` | Grade the current episode |
+| `POST` | `/baseline` | Run rule-based baseline and return scores |
+| `GET`  | `/health` | Health check |
+| `WS`   | `/ws` | WebSocket persistent session |
+
+Interactive API docs: `http://localhost:8000/docs`
+
+---
+
+## Setup & Running
+
+### Local (Python)
+
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Start the server (from the parent directory of payops_env)
+PYTHONPATH=$(pwd) uvicorn payops_env.server.app:app --host 0.0.0.0 --port 8000
+
+# 3. Verify
+curl http://localhost:8000/health
+```
+
+### Run the baseline agent
+
+```bash
+# From the project root
+PYTHONPATH=$(pwd) python payops_env/scripts/baseline_agent.py
+```
+
+### Docker
+
+```bash
+# Build
+docker build -t payops-env .
+
+# Run locally on port 8000
+docker run -p 8000:7860 -e PORT=7860 payops-env
+
+# Verify
+curl http://localhost:8000/health
+```
+
+### HuggingFace Space
+
+The `Dockerfile` exposes port **7860** (HF Spaces default).  Push the repo to
+a HF Space with Docker runtime — no additional configuration required.
+
+---
+
+## Example Agent Interaction
+
+```python
+import httpx
+
+base = "http://localhost:8000"
+
+# Reset
+obs = httpx.post(f"{base}/reset").json()
+print(obs["transaction_id"], obs["risk_score"], obs["flags"])
+
+# Step
+while not obs["done"]:
+    # ... agent decides action_type ...
+    obs = httpx.post(f"{base}/step", json={
+        "action_type": "approve",
+        "transaction_id": obs["transaction_id"],
+    }).json()
+    print(f"reward={obs['reward']:+.2f}  done={obs['done']}")
+
+# Grade
+score = httpx.get(f"{base}/grader").json()
+print(f"Episode score: {score['normalised_score']:.4f}")
+```
+
+---
+
+## Baseline Results
+
+The rule-based baseline agent uses a deterministic priority-ordered policy.
+
+| Metric | Baseline |
+|--------|----------|
+| Normalised score | ~0.67 |
+| Total reward | ~8.0 / 12.0 |
+| Passed | Yes |
+| Strong at | Easy tasks, clear velocity/flag patterns |
+| Weak at | Hard adversarial tasks (e.g. FX settlement over-rejected) |
+
+Run `POST /baseline` to reproduce these results programmatically.
+
+---
+
+## Project Structure
+
+```
+payops_env/
+├── models.py              # PayOpsAction, PayOpsObservation, PayOpsState (Pydantic)
+├── environment.py         # PayOpsEnvironment — reset_async / step_async / state
+├── tasks.py               # 12 tasks (easy / medium / hard) with ground-truth labels
+├── grader.py              # Partial-credit reward function + episode grader
+├── scripts_util.py        # Baseline runner helper (used by /baseline endpoint)
+├── scripts/
+│   └── baseline_agent.py  # Standalone rule-based baseline agent
+├── server/
+│   └── app.py             # FastAPI server with all required endpoints
+├── openenv.yaml           # OpenEnv manifest
+├── Dockerfile             # Docker / HuggingFace Space container
+├── requirements.txt       # Python dependencies
+└── README.md              # This file
+```
+
+---
+
+## Evaluation Criteria Alignment
+
+| Criterion | Implementation |
+|-----------|---------------|
+| Real-world utility | Payment fraud and compliance triage — a genuine operational domain |
+| Task & grader quality | 12 tasks across 3 difficulty tiers; partial-credit grader; clear pass/fail |
+| Environment design | Rich observation space; 6-action space; inspect mechanic; episode state tracking |
+| Code quality & spec compliance | Pydantic v2 models; async API; all required endpoints; openenv.yaml |
+| Creativity & novelty | Adversarial model-poisoning task; APP scam; FX settlement edge-case |
+
+
+| Outcome                          | Reward |
+|----------------------------------|--------|
+| Correct action                   | +1.0   |
+| Approve a dangerous transaction  | -2.0   |
+| Wrong reject                     | -0.5   |
+| Wrong flag / escalate            | -0.25  |
+
+## Quick Start
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the server
+uvicorn server.app:app --reload
+
+# Run the baseline agent (no server needed)
+python scripts/baseline_agent.py
+```
+
+## Docker
+
+```bash
+docker build -t payops-env:latest .
+docker run -p 8000:8000 payops-env:latest
+```

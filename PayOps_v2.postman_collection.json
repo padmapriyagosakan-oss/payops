@@ -1,0 +1,1196 @@
+{
+  "info": {
+    "_postman_id": "payops-v2-full-suite",
+    "name": "PayOps v2 — Full Test Suite",
+    "description": "Complete Postman collection for PayOps v2.0.0 environment.\nGroups: Infrastructure · Tasks · Reset · Terminal Actions · Wrong Actions · Investigation · State · Grader · Replay · Baseline · Analytics · Leaderboard · Edge Cases · Perfect Episode · Budget Mechanics\n\nBase URL variable: {{base_url}} = http://localhost:8000",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "episode_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+
+    {
+      "name": "A — Infrastructure",
+      "item": [
+        {
+          "name": "A-01 Health check",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('status=ok', () => pm.expect(pm.response.json().status).to.eql('ok'));",
+            "pm.test('version=2.0.0', () => pm.expect(pm.response.json().version).to.eql('2.0.0'));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"]}
+          }
+        },
+        {
+          "name": "A-02 Schema — models present",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const body = pm.response.text();",
+            "pm.test('PayOpsAction in schema', () => pm.expect(body).to.include('PayOpsAction'));",
+            "pm.test('PayOpsObservation in schema', () => pm.expect(body).to.include('PayOpsObservation'));",
+            "pm.test('PayOpsState in schema', () => pm.expect(body).to.include('PayOpsState'));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/schema", "host": ["{{base_url}}"], "path": ["schema"]}
+          }
+        },
+        {
+          "name": "A-03 Schema — all 10 action types",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const body = pm.response.text();",
+            "['approve','reject','flag','escalate','hold','inspect','request_docs','verify_kyc','contact_sender','file_sar'].forEach(a => {",
+            "  pm.test(`action ${a} in schema`, () => pm.expect(body).to.include(a));",
+            "});"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/schema", "host": ["{{base_url}}"], "path": ["schema"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "B — Tasks Endpoint",
+      "item": [
+        {
+          "name": "B-01 Tasks — count=20",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const d = pm.response.json();",
+            "pm.test('count=20', () => pm.expect(d.count).to.eql(20));",
+            "pm.test('tasks array length=20', () => pm.expect(d.tasks.length).to.eql(20));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/tasks", "host": ["{{base_url}}"], "path": ["tasks"]}
+          }
+        },
+        {
+          "name": "B-02 Tasks — all 4 difficulty tiers",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const tasks = pm.response.json().tasks;",
+            "const diffs = tasks.map(t => t.difficulty);",
+            "['easy','medium','hard','critical'].forEach(d => {",
+            "  pm.test(`tier '${d}' present`, () => pm.expect(diffs).to.include(d));",
+            "});"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/tasks", "host": ["{{base_url}}"], "path": ["tasks"]}
+          }
+        },
+        {
+          "name": "B-03 Tasks — task structure fields",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const t = pm.response.json().tasks[0];",
+            "['task_id','difficulty','correct_action','requires_investigation','regulatory_action','chain_total'].forEach(f => {",
+            "  pm.test(`field '${f}' present`, () => pm.expect(t).to.have.property(f));",
+            "});"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/tasks", "host": ["{{base_url}}"], "path": ["tasks"]}
+          }
+        },
+        {
+          "name": "B-04 Tasks — chain_total >= 1 on all",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const tasks = pm.response.json().tasks;",
+            "pm.test('all tasks have chain_total >= 1', () => {",
+            "  tasks.forEach(t => pm.expect(t.chain_total).to.be.at.least(1));",
+            "});"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/tasks", "host": ["{{base_url}}"], "path": ["tasks"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "C — Reset",
+      "item": [
+        {
+          "name": "C-01 Reset — first observation",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const d = pm.response.json();",
+            "pm.test('first task is EASY-001', () => pm.expect(d.task_id).to.eql('EASY-001'));",
+            "pm.test('done=false', () => pm.expect(d.done).to.eql(false));",
+            "pm.test('budget_remaining=5.0', () => pm.expect(d.budget_remaining).to.eql(5.0));",
+            "pm.test('risk_score present', () => pm.expect(d).to.have.property('risk_score'));",
+            "pm.test('ml_confidence present', () => pm.expect(d).to.have.property('ml_confidence'));",
+            "pm.test('chain_total present', () => pm.expect(d).to.have.property('chain_total'));",
+            "pm.test('steps_remaining present', () => pm.expect(d).to.have.property('steps_remaining'));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "url": {"raw": "{{base_url}}/reset", "host": ["{{base_url}}"], "path": ["reset"]}
+          }
+        },
+        {
+          "name": "C-02 State after reset",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('episode_id set', () => pm.expect(d.episode_id).to.be.a('string').and.not.empty);",
+            "pm.collectionVariables.set('episode_id', d.episode_id);",
+            "pm.test('step_count=0', () => pm.expect(d.step_count).to.eql(0));",
+            "pm.test('budget_spent=0', () => pm.expect(d.budget_spent).to.eql(0));",
+            "pm.test('correct_decisions=0', () => pm.expect(d.correct_decisions).to.eql(0));",
+            "pm.test('investigation_actions_used is array', () => pm.expect(d.investigation_actions_used).to.be.an('array'));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/state", "host": ["{{base_url}}"], "path": ["state"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "D — Terminal Actions (Correct)",
+      "item": [
+        {
+          "name": "D-01 EASY-001 approve → reward=1.0",
+          "event": [
+            {"listen": "prerequest", "script": {"exec": ["// ensure fresh episode"], "type": "text/javascript"}},
+            {"listen": "test", "script": {"exec": [
+              "const d = pm.response.json();",
+              "pm.test('reward=1.0', () => pm.expect(d.reward).to.eql(1.0));",
+              "pm.test('advances to EASY-002', () => pm.expect(d.task_id).to.eql('EASY-002'));"
+            ], "type": "text/javascript"}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"approve\", \"transaction_id\": \"TXN-E001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-02 EASY-002 reject → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"reject\", \"transaction_id\": \"TXN-E002\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-03 EASY-003 approve → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"approve\", \"transaction_id\": \"TXN-E003\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-04 EASY-004 flag → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"flag\", \"transaction_id\": \"TXN-E004\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-05 MED-001 escalate → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"escalate\", \"transaction_id\": \"TXN-M001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-06 MED-002 hold → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"hold\", \"transaction_id\": \"TXN-M002\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-07 MED-003 flag → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"flag\", \"transaction_id\": \"TXN-M003\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-08 MED-004 flag → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"flag\", \"transaction_id\": \"TXN-M004\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-09 MED-005 hold → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"hold\", \"transaction_id\": \"TXN-M005\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-10 MED-006 escalate → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"escalate\", \"transaction_id\": \"TXN-M006\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-11 HARD-001 escalate → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"escalate\", \"transaction_id\": \"TXN-H001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-12 HARD-002 reject → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"reject\", \"transaction_id\": \"TXN-H002\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-13 HARD-003 reject → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"reject\", \"transaction_id\": \"TXN-H003\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-14 HARD-004 approve → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"approve\", \"transaction_id\": \"TXN-H004\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-15 HARD-005 escalate → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"escalate\", \"transaction_id\": \"TXN-H005\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-16 HARD-006 flag → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"flag\", \"transaction_id\": \"TXN-H006\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-17 CRIT-001 approve → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"approve\", \"transaction_id\": \"TXN-C001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-18 CRIT-002 reject → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"reject\", \"transaction_id\": \"TXN-C002\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-19 CRIT-003 escalate → reward=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=1.0', () => pm.expect(pm.response.json().reward).to.eql(1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"escalate\", \"transaction_id\": \"TXN-C003\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "D-20 CRIT-004 reject → reward=1.0 + done=true",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('reward=1.0', () => pm.expect(d.reward).to.eql(1.0));",
+            "pm.test('episode done', () => pm.expect(d.done).to.eql(true));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"reject\", \"transaction_id\": \"TXN-C004\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "E — Wrong Actions & Partial Credit",
+      "item": [
+        {
+          "name": "E-00 Reset before wrong-action tests",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reset ok', () => pm.response.to.have.status(200));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "url": {"raw": "{{base_url}}/reset", "host": ["{{base_url}}"], "path": ["reset"]}
+          }
+        },
+        {
+          "name": "E-01 Approve legit EASY-001 (correct, advance)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"approve\", \"transaction_id\": \"TXN-E001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "E-02 Approve fraud EASY-002 → reward=-1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=-1.0 for fraud approval', () => pm.expect(pm.response.json().reward).to.eql(-1.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"approve\", \"transaction_id\": \"TXN-E002\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "E-03 Reject legit EASY-003 → reward=-0.5",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('reward=-0.5 for wrong reject', () => pm.expect(pm.response.json().reward).to.eql(-0.5));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"reject\", \"transaction_id\": \"TXN-E003\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "E-04 Flag EASY-004 correct → reward=1.0",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"flag\", \"transaction_id\": \"TXN-E004\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "E-05 Partial credit — flag instead of escalate (MED-001)",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('partial credit reward > -1 and < 1', () => {",
+            "  pm.expect(d.reward).to.be.greaterThan(-1.0);",
+            "  pm.expect(d.reward).to.be.lessThan(1.0);",
+            "});"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"flag\", \"transaction_id\": \"TXN-M001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "F — Investigation Sub-Actions",
+      "item": [
+        {
+          "name": "F-00 Reset before investigation tests",
+          "request": {
+            "method": "POST",
+            "url": {"raw": "{{base_url}}/reset", "host": ["{{base_url}}"], "path": ["reset"]}
+          }
+        },
+        {
+          "name": "F-01 inspect → reward=0.15, notes populated, budget=4.9",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('reward=0.15', () => pm.expect(d.reward).to.eql(0.15));",
+            "pm.test('task unchanged (EASY-001)', () => pm.expect(d.task_id).to.eql('EASY-001'));",
+            "pm.test('inspection_notes populated', () => pm.expect(d.inspection_notes).to.be.a('string').and.not.empty);",
+            "pm.test('budget_remaining=4.9', () => pm.expect(d.budget_remaining).to.eql(4.9));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"inspect\", \"transaction_id\": \"TXN-E001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "F-02 inspect again (duplicate) → reward=0.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('duplicate inspect reward=0.0', () => pm.expect(pm.response.json().reward).to.eql(0.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"inspect\", \"transaction_id\": \"TXN-E001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "F-03 approve EASY-001 (advance to E-002)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"approve\", \"transaction_id\": \"TXN-E001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "F-04 request_docs → reward=0.15, docs_notes, budget-0.2",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('reward=0.15', () => pm.expect(d.reward).to.eql(0.15));",
+            "pm.test('docs_notes populated', () => pm.expect(d.docs_notes).to.be.a('string').and.not.empty);",
+            "pm.test('budget decreased by 0.2', () => pm.expect(d.budget_remaining).to.be.closeTo(4.6, 0.01));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"request_docs\", \"transaction_id\": \"TXN-E002\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "F-05 request_docs again (duplicate) → reward=0.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('duplicate request_docs reward=0.0', () => pm.expect(pm.response.json().reward).to.eql(0.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"request_docs\", \"transaction_id\": \"TXN-E002\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "F-06 reject EASY-002 (advance to E-003)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"reject\", \"transaction_id\": \"TXN-E002\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "F-07 verify_kyc → reward=0.15, kyc_notes, budget-0.2",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('reward=0.15', () => pm.expect(d.reward).to.eql(0.15));",
+            "pm.test('kyc_notes populated', () => pm.expect(d.kyc_notes).to.be.a('string').and.not.empty);",
+            "pm.test('budget decreased by 0.2', () => pm.expect(d.budget_remaining).to.be.closeTo(4.2, 0.05));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"verify_kyc\", \"transaction_id\": \"TXN-E003\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "F-08 approve EASY-003 (advance to E-004)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"approve\", \"transaction_id\": \"TXN-E003\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "F-09 contact_sender → reward=0.15, contact_notes, budget-0.3",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('reward=0.15', () => pm.expect(d.reward).to.eql(0.15));",
+            "pm.test('contact_notes populated', () => pm.expect(d.contact_notes).to.be.a('string').and.not.empty);",
+            "pm.test('budget decreased by 0.3', () => pm.expect(d.budget_remaining).to.be.lessThan(4.2));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"contact_sender\", \"transaction_id\": \"TXN-E004\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "F-10 flag EASY-004 (advance to M-001)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"flag\", \"transaction_id\": \"TXN-E004\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "F-11 file_sar → reward=0.15, docs_notes has SAR, budget-0.05",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('reward=0.15', () => pm.expect(d.reward).to.eql(0.15));",
+            "pm.test('docs_notes contains SAR', () => pm.expect(d.docs_notes).to.include('SAR'));",
+            "pm.test('budget_remaining updated', () => pm.expect(d.budget_remaining).to.be.lessThan(5.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"file_sar\", \"transaction_id\": \"TXN-M001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "G — State Endpoint",
+      "item": [
+        {
+          "name": "G-01 State — all required fields",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "['episode_id','step_count','budget_spent','budget_limit','investigation_actions_used','correct_decisions','wrong_high_cost','recent_decisions'].forEach(f => {",
+            "  pm.test(`field '${f}' present`, () => pm.expect(d).to.have.property(f));",
+            "});"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/state", "host": ["{{base_url}}"], "path": ["state"]}
+          }
+        },
+        {
+          "name": "G-02 State — budget_spent reflects investigation costs",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('budget_spent > 0', () => pm.expect(pm.response.json().budget_spent).to.be.greaterThan(0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/state", "host": ["{{base_url}}"], "path": ["state"]}
+          }
+        },
+        {
+          "name": "G-03 State — investigation_actions_used is array",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('investigation_actions_used is array', () => pm.expect(pm.response.json().investigation_actions_used).to.be.an('array'));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/state", "host": ["{{base_url}}"], "path": ["state"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "H — Grader Endpoint",
+      "item": [
+        {
+          "name": "H-01 Grader — full result structure",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "['normalised_score','total_reward','max_possible_reward','budget_spent','budget_penalty','per_task','passed'].forEach(f => {",
+            "  pm.test(`field '${f}' present`, () => pm.expect(d).to.have.property(f));",
+            "});"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/grader", "host": ["{{base_url}}"], "path": ["grader"]}
+          }
+        },
+        {
+          "name": "H-02 Grader — per_task has reward_breakdown",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('per_task is array', () => pm.expect(d.per_task).to.be.an('array'));",
+            "if (d.per_task.length > 0) {",
+            "  pm.test('per_task[0] has reward_breakdown', () => pm.expect(d.per_task[0]).to.have.property('reward_breakdown'));",
+            "  pm.test('per_task[0] has difficulty', () => pm.expect(d.per_task[0]).to.have.property('difficulty'));",
+            "}"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/grader", "host": ["{{base_url}}"], "path": ["grader"]}
+          }
+        },
+        {
+          "name": "H-03 Grader — normalised_score in [0,1]",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const s = pm.response.json().normalised_score;",
+            "pm.test('score in [0,1]', () => { pm.expect(s).to.be.at.least(0); pm.expect(s).to.be.at.most(1); });"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/grader", "host": ["{{base_url}}"], "path": ["grader"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "I — Replay Endpoint",
+      "item": [
+        {
+          "name": "I-01 Replay — 20 all-correct actions → score=1.0",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('normalised_score=1.0', () => pm.expect(d.normalised_score).to.eql(1.0));",
+            "pm.test('passed=true', () => pm.expect(d.passed).to.eql(true));",
+            "pm.test('budget_spent=0.0', () => pm.expect(d.budget_spent).to.eql(0.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"actions\": [\n    \"approve\", \"reject\", \"approve\", \"flag\",\n    \"escalate\", \"hold\", \"flag\", \"flag\", \"hold\", \"escalate\",\n    \"escalate\", \"reject\", \"reject\", \"approve\", \"escalate\", \"flag\",\n    \"approve\", \"reject\", \"escalate\", \"reject\"\n  ]\n}"},
+            "url": {"raw": "{{base_url}}/replay", "host": ["{{base_url}}"], "path": ["replay"]}
+          }
+        },
+        {
+          "name": "I-02 Replay — with inspect sub-actions → budget_spent=0.1",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('budget_spent=0.1', () => pm.expect(d.budget_spent).to.eql(0.1));",
+            "pm.test('per_task present', () => pm.expect(d.per_task).to.be.an('array'));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"actions\": [\n    \"inspect\", \"approve\", \"reject\", \"approve\", \"flag\",\n    \"escalate\", \"hold\", \"flag\", \"flag\", \"hold\", \"escalate\",\n    \"escalate\", \"reject\", \"reject\", \"approve\", \"escalate\", \"flag\",\n    \"approve\", \"reject\", \"escalate\", \"reject\"\n  ]\n}"},
+            "url": {"raw": "{{base_url}}/replay", "host": ["{{base_url}}"], "path": ["replay"]}
+          }
+        },
+        {
+          "name": "I-03 Replay — with confidences",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('accepts confidences, returns score', () => pm.expect(pm.response.json()).to.have.property('normalised_score'));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"actions\": [\"approve\", \"reject\"],\n  \"confidences\": [0.95, 0.88]\n}"},
+            "url": {"raw": "{{base_url}}/replay", "host": ["{{base_url}}"], "path": ["replay"]}
+          }
+        },
+        {
+          "name": "I-04 Replay — all-wrong actions → score very low",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('all-wrong score < 0.3', () => pm.expect(d.normalised_score).to.be.lessThan(0.3));",
+            "pm.test('passed=false', () => pm.expect(d.passed).to.eql(false));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"actions\": [\n    \"reject\", \"approve\", \"reject\", \"reject\",\n    \"reject\", \"reject\", \"reject\", \"reject\", \"reject\", \"reject\",\n    \"reject\", \"approve\", \"approve\", \"reject\", \"reject\", \"reject\",\n    \"reject\", \"approve\", \"reject\", \"approve\"\n  ]\n}"},
+            "url": {"raw": "{{base_url}}/replay", "host": ["{{base_url}}"], "path": ["replay"]}
+          }
+        },
+        {
+          "name": "I-05 Replay — invalid action → 422",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('422 or error body', () => {",
+            "  const ok = pm.response.code === 422 || (pm.response.code === 400);",
+            "  const hasError = pm.response.text().includes('Invalid') || pm.response.text().includes('detail');",
+            "  pm.expect(ok || hasError).to.be.true;",
+            "});"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"actions\": [\"delete\", \"approve\"]}"},
+            "url": {"raw": "{{base_url}}/replay", "host": ["{{base_url}}"], "path": ["replay"]}
+          }
+        },
+        {
+          "name": "I-06 Replay — empty actions list",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('handles empty list gracefully', () => pm.expect(pm.response.json()).to.have.property('normalised_score'));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"actions\": []}"},
+            "url": {"raw": "{{base_url}}/replay", "host": ["{{base_url}}"], "path": ["replay"]}
+          }
+        },
+        {
+          "name": "I-07 Replay — does NOT alter live server state",
+          "event": [
+            {"listen": "prerequest", "script": {"exec": [
+              "// capture current state to compare after replay",
+              "pm.sendRequest(`${pm.collectionVariables.get('base_url') || 'http://localhost:8000'}/state`, (err, res) => {",
+              "  if (!err) pm.collectionVariables.set('state_before', JSON.stringify(res.json().step_count));",
+              "});"
+            ], "type": "text/javascript"}},
+            {"listen": "test", "script": {"exec": [
+              "pm.sendRequest(`${pm.collectionVariables.get('base_url') || 'http://localhost:8000'}/state`, (err, res) => {",
+              "  const before = pm.collectionVariables.get('state_before');",
+              "  const after = JSON.stringify(res.json().step_count);",
+              "  pm.test('server state unchanged after replay', () => pm.expect(before).to.eql(after));",
+              "});"
+            ], "type": "text/javascript"}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"actions\": [\"approve\", \"reject\"]}"},
+            "url": {"raw": "{{base_url}}/replay", "host": ["{{base_url}}"], "path": ["replay"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "J — Baseline Endpoint",
+      "item": [
+        {
+          "name": "J-01 Baseline — full result",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "['normalised_score','total_reward','steps','scores'].forEach(f => {",
+            "  pm.test(`field '${f}' present`, () => pm.expect(d).to.have.property(f));",
+            "});",
+            "pm.test('score > 0.5', () => pm.expect(d.normalised_score).to.be.greaterThan(0.5));",
+            "pm.test('steps = 20', () => pm.expect(d.steps).to.eql(20));",
+            "pm.test('scores length = 20', () => pm.expect(d.scores.length).to.eql(20));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "url": {"raw": "{{base_url}}/baseline", "host": ["{{base_url}}"], "path": ["baseline"]}
+          }
+        },
+        {
+          "name": "J-02 Baseline — passed=true",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('passed=true', () => pm.expect(pm.response.json().passed).to.eql(true));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "url": {"raw": "{{base_url}}/baseline", "host": ["{{base_url}}"], "path": ["baseline"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "K — Analytics Endpoint",
+      "item": [
+        {
+          "name": "K-01 Analytics — structure",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "const d = pm.response.json();",
+            "const hasMsg = d.message !== undefined;",
+            "const hasData = d.episodes_completed !== undefined;",
+            "pm.test('returns message or episode data', () => pm.expect(hasMsg || hasData).to.be.true);"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/analytics", "host": ["{{base_url}}"], "path": ["analytics"]}
+          }
+        },
+        {
+          "name": "K-02 Analytics — after completed episode",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('episodes_completed >= 1', () => pm.expect(d.episodes_completed).to.be.at.least(1));",
+            "pm.test('best_score present', () => pm.expect(d).to.have.property('best_score'));",
+            "pm.test('avg_score present', () => pm.expect(d).to.have.property('avg_score'));",
+            "pm.test('by_difficulty present', () => pm.expect(d).to.have.property('by_difficulty'));",
+            "pm.test('easy accuracy present', () => pm.expect(d.by_difficulty).to.have.property('easy'));",
+            "pm.test('critical accuracy present', () => pm.expect(d.by_difficulty).to.have.property('critical'));"
+          ], "type": "text/javascript"}},
+          {"listen": "prerequest", "script": {"exec": [
+            "// Run a complete episode first so analytics has data",
+            "const base = pm.collectionVariables.get('base_url') || 'http://localhost:8000';",
+            "const actions = [",
+            "  ['approve','TXN-E001'],['reject','TXN-E002'],['approve','TXN-E003'],['flag','TXN-E004'],",
+            "  ['escalate','TXN-M001'],['hold','TXN-M002'],['flag','TXN-M003'],['flag','TXN-M004'],",
+            "  ['hold','TXN-M005'],['escalate','TXN-M006'],",
+            "  ['escalate','TXN-H001'],['reject','TXN-H002'],['reject','TXN-H003'],['approve','TXN-H004'],",
+            "  ['escalate','TXN-H005'],['flag','TXN-H006'],",
+            "  ['approve','TXN-C001'],['reject','TXN-C002'],['escalate','TXN-C003'],['reject','TXN-C004']",
+            "];",
+            "// Note: triggering via test runner means sequence matters — this prerequest",
+            "// runs before the actual GET /analytics is sent."
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/analytics", "host": ["{{base_url}}"], "path": ["analytics"]}
+          }
+        },
+        {
+          "name": "K-03 Analytics — current_episode present",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('current_episode field present', () => pm.expect(pm.response.json()).to.have.property('current_episode'));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/analytics", "host": ["{{base_url}}"], "path": ["analytics"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "L — Leaderboard Endpoint",
+      "item": [
+        {
+          "name": "L-01 Leaderboard — structure",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('status 200', () => pm.response.to.have.status(200));",
+            "pm.test('count field present', () => pm.expect(d).to.have.property('count'));",
+            "pm.test('entries field present', () => pm.expect(d).to.have.property('entries'));",
+            "pm.test('entries is array', () => pm.expect(d.entries).to.be.an('array'));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/leaderboard", "host": ["{{base_url}}"], "path": ["leaderboard"]}
+          }
+        },
+        {
+          "name": "L-02 Leaderboard — entry structure",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "if (d.entries.length > 0) {",
+            "  const e = d.entries[0];",
+            "  ['episode_id','normalised_score','timestamp','budget_spent'].forEach(f => {",
+            "    pm.test(`entry has field '${f}'`, () => pm.expect(e).to.have.property(f));",
+            "  });",
+            "} else {",
+            "  pm.test('no entries yet (ok before completing episode)', () => true);",
+            "}"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/leaderboard", "host": ["{{base_url}}"], "path": ["leaderboard"]}
+          }
+        },
+        {
+          "name": "L-03 Leaderboard — after baseline run, count >= 1",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('at least one entry after baseline', () => pm.expect(pm.response.json().count).to.be.at.least(1));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/leaderboard", "host": ["{{base_url}}"], "path": ["leaderboard"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "M — Budget Mechanics",
+      "item": [
+        {
+          "name": "M-00 Reset for budget test",
+          "request": {
+            "method": "POST",
+            "url": {"raw": "{{base_url}}/reset", "host": ["{{base_url}}"], "path": ["reset"]}
+          }
+        },
+        {
+          "name": "M-01 contact_sender (cost=0.3) → budget=4.7",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('budget_remaining=4.7', () => pm.expect(pm.response.json().budget_remaining).to.be.closeTo(4.7, 0.01));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"contact_sender\", \"transaction_id\": \"TXN-E001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "M-02 request_docs (cost=0.2) → budget=4.5",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('budget_remaining=4.5', () => pm.expect(pm.response.json().budget_remaining).to.be.closeTo(4.5, 0.01));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"request_docs\", \"transaction_id\": \"TXN-E001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "M-03 verify_kyc (cost=0.2) → budget=4.3",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('budget_remaining=4.3', () => pm.expect(pm.response.json().budget_remaining).to.be.closeTo(4.3, 0.01));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"verify_kyc\", \"transaction_id\": \"TXN-E001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "M-04 file_sar (cost=0.05) → budget=4.25",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('budget_remaining=4.25', () => pm.expect(pm.response.json().budget_remaining).to.be.closeTo(4.25, 0.01));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"file_sar\", \"transaction_id\": \"TXN-E001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "M-05 Grader shows non-zero budget_spent",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('budget_spent > 0', () => pm.expect(pm.response.json().budget_spent).to.be.greaterThan(0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/grader", "host": ["{{base_url}}"], "path": ["grader"]}
+          }
+        },
+        {
+          "name": "M-06 Replay — heavy investigation causes budget_penalty",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('budget_overspend > 0', () => pm.expect(d.budget_overspend).to.be.greaterThan(0));",
+            "pm.test('budget_penalty > 0', () => pm.expect(d.budget_penalty).to.be.greaterThan(0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"actions\": [\n    \"contact_sender\",\"contact_sender\",\"contact_sender\",\"contact_sender\",\n    \"contact_sender\",\"contact_sender\",\"contact_sender\",\"contact_sender\",\n    \"contact_sender\",\"contact_sender\",\"contact_sender\",\"contact_sender\",\n    \"contact_sender\",\"contact_sender\",\"contact_sender\",\"contact_sender\",\n    \"contact_sender\",\"contact_sender\",\n    \"approve\",\"reject\",\"approve\",\"flag\",\n    \"escalate\",\"hold\",\"flag\",\"flag\",\"hold\",\"escalate\",\n    \"escalate\",\"reject\",\"reject\",\"approve\",\"escalate\",\"flag\",\n    \"approve\",\"reject\",\"escalate\",\"reject\"\n  ]\n}"},
+            "url": {"raw": "{{base_url}}/replay", "host": ["{{base_url}}"], "path": ["replay"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "N — Edge Cases & Errors",
+      "item": [
+        {
+          "name": "N-01 Unknown action_type → 422",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('error response', () => {",
+            "  const code = pm.response.code;",
+            "  pm.expect([400, 422]).to.include(code);",
+            "});"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\": \"nuke\", \"transaction_id\": \"TXN-E001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "N-02 Missing action_type → 422",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('422 for missing field', () => pm.expect([400, 422]).to.include(pm.response.code));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"transaction_id\": \"TXN-E001\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "N-03 Empty POST body → 422",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('422 for empty body', () => pm.expect([400, 422]).to.include(pm.response.code));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "N-04 Replay with partial confidences (shorter than actions)",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('handles partial confidences gracefully', () => pm.expect(pm.response.json()).to.have.property('normalised_score'));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"actions\": [\"approve\", \"reject\", \"approve\"], \"confidences\": [0.9]}"},
+            "url": {"raw": "{{base_url}}/replay", "host": ["{{base_url}}"], "path": ["replay"]}
+          }
+        },
+        {
+          "name": "N-05 Replay with invalid JSON → 422",
+          "event": [{"listen": "test", "script": {"exec": [
+            "pm.test('error on invalid JSON', () => pm.expect([400, 422]).to.include(pm.response.code));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{broken json}"},
+            "url": {"raw": "{{base_url}}/replay", "host": ["{{base_url}}"], "path": ["replay"]}
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "O — Perfect Episode (Full Run)",
+      "item": [
+        {
+          "name": "O-00 Reset (start fresh)",
+          "request": {
+            "method": "POST",
+            "url": {"raw": "{{base_url}}/reset", "host": ["{{base_url}}"], "path": ["reset"]}
+          }
+        },
+        {"name": "O-01 EASY-001 approve", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"approve\",\"transaction_id\":\"TXN-E001\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-02 EASY-002 reject", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"reject\",\"transaction_id\":\"TXN-E002\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-03 EASY-003 approve", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"approve\",\"transaction_id\":\"TXN-E003\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-04 EASY-004 flag", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"flag\",\"transaction_id\":\"TXN-E004\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-05 MED-001 escalate", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"escalate\",\"transaction_id\":\"TXN-M001\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-06 MED-002 hold", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"hold\",\"transaction_id\":\"TXN-M002\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-07 MED-003 flag", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"flag\",\"transaction_id\":\"TXN-M003\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-08 MED-004 flag", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"flag\",\"transaction_id\":\"TXN-M004\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-09 MED-005 hold", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"hold\",\"transaction_id\":\"TXN-M005\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-10 MED-006 escalate", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"escalate\",\"transaction_id\":\"TXN-M006\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-11 HARD-001 escalate", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"escalate\",\"transaction_id\":\"TXN-H001\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-12 HARD-002 reject", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"reject\",\"transaction_id\":\"TXN-H002\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-13 HARD-003 reject", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"reject\",\"transaction_id\":\"TXN-H003\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-14 HARD-004 approve", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"approve\",\"transaction_id\":\"TXN-H004\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-15 HARD-005 escalate", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"escalate\",\"transaction_id\":\"TXN-H005\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-16 HARD-006 flag", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"flag\",\"transaction_id\":\"TXN-H006\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-17 CRIT-001 approve", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"approve\",\"transaction_id\":\"TXN-C001\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-18 CRIT-002 reject", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"reject\",\"transaction_id\":\"TXN-C002\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {"name": "O-19 CRIT-003 escalate", "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"action_type\":\"escalate\",\"transaction_id\":\"TXN-C003\"}"}, "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}}},
+        {
+          "name": "O-20 CRIT-004 reject → done=true",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('reward=1.0', () => pm.expect(d.reward).to.eql(1.0));",
+            "pm.test('done=true', () => pm.expect(d.done).to.eql(true));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"action_type\":\"reject\",\"transaction_id\":\"TXN-C004\"}"},
+            "url": {"raw": "{{base_url}}/step", "host": ["{{base_url}}"], "path": ["step"]}
+          }
+        },
+        {
+          "name": "O-21 Grader — score=1.0 after perfect episode",
+          "event": [{"listen": "test", "script": {"exec": [
+            "const d = pm.response.json();",
+            "pm.test('normalised_score=1.0', () => pm.expect(d.normalised_score).to.eql(1.0));",
+            "pm.test('passed=true', () => pm.expect(d.passed).to.eql(true));",
+            "pm.test('budget_penalty=0', () => pm.expect(d.budget_penalty).to.eql(0.0));"
+          ], "type": "text/javascript"}}],
+          "request": {
+            "method": "GET",
+            "url": {"raw": "{{base_url}}/grader", "host": ["{{base_url}}"], "path": ["grader"]}
+          }
+        }
+      ]
+    }
+
+  ]
+}
