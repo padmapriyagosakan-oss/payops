@@ -105,6 +105,7 @@ observation_space:
     - reward
     - reward_breakdown
     - recent_decisions
+    - network_graph
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 tasks:
@@ -126,12 +127,27 @@ budget:
   overspend_penalty_rate: 0.1
 
 # ── Reward ───────────────────────────────────────────────────────────────────
+# Trajectory-based reward (v2): rewards correct intermediate reasoning AND
+# the final terminal decision to provide a dense signal.
 reward:
-  min: -1.0
-  max: 1.0
+  # Terminal-action credit
+  terminal_correct: 0.60
+  # Investigation eligibility bonus (per eligible sub-action used, first use only)
+  investigation_eligible: 0.20
+  # Flag-identification bonus (agent used inspect AND task has decisive key_flags)
+  flag_identification: 0.20
+  # Confidence bonus when agent confidence >= 0.8 and final action is correct
+  confidence_correct: 0.10
+  confidence_wrong: -0.10
+  # Regulatory bonus for SAR filing on regulatory tasks before terminal action
+  regulatory_sar: 0.20
+  # Duplicate investigation penalty (same sub-action on same task, second+ use)
+  duplicate_investigation_penalty: -0.05
   partial_credit: true
-  investigation_bonus: 0.15
   passing_threshold: 0.5
+  # Bounds: normalised episode score is strictly clamped to [0.0, 1.0]
+  min_score: 0.0
+  max_score: 1.0
 
 # ── Inference script ─────────────────────────────────────────────────────────
 inference:

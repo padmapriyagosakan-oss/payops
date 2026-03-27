@@ -90,6 +90,18 @@ class PayOpsTask:
     kyc_reveal: Optional[str] = None
     contact_reveal: Optional[str] = None
 
+    # --- key diagnostic flags (used for flag-identification reward shaping) ---
+    key_flags: List[str] = field(default_factory=list)
+    # Subset of flags that are causally decisive for the correct_action.
+    # An agent that calls inspect AND those flags are in the observation
+    # receives an additional flag_identification bonus in the grader.
+
+    # --- network graph (mule chain / correspondent bank relationships) ---
+    network_graph: Optional[Dict[str, str]] = None
+    # Optional dict mapping roles to entity IDs, e.g.:
+    #   {"sender": "acc_123", "mule": "acc_456", "offshore": "bank_789"}
+    # Exposed in observation so agents can reason about chains.
+
     # --- multi-step chain metadata ---
     chain_total: int = 1
     # chain_total > 1 means the task spans multiple investigation steps.
@@ -122,6 +134,7 @@ EASY_TASKS: List[PayOpsTask] = [
         correct_action="approve",
         partial_credit_actions={"flag": 0.3},
         inspect_reveal="Sender account 3 yrs old. Consistent transaction history. KYC fully verified.",
+        key_flags=[],
     ),
     PayOpsTask(
         task_id="EASY-002",
@@ -144,6 +157,8 @@ EASY_TASKS: List[PayOpsTask] = [
         correct_action="reject",
         partial_credit_actions={"escalate": 0.4, "flag": 0.2},
         inspect_reveal="Receiver linked to 3 prior rejected transactions. IP on threat-intel blocklist.",
+        key_flags=["sanctioned_country", "unknown_sender"],
+        network_graph={"sender": "unknown_user_x99", "offshore": "offshore_acct_442"},
     ),
     PayOpsTask(
         task_id="EASY-003",
@@ -166,6 +181,7 @@ EASY_TASKS: List[PayOpsTask] = [
         correct_action="approve",
         partial_credit_actions={"flag": 0.3},
         inspect_reveal="Standard return via web checkout. Matching order ID on file. No anomalies.",
+        key_flags=[],
     ),
     PayOpsTask(
         task_id="EASY-004",
@@ -188,6 +204,7 @@ EASY_TASKS: List[PayOpsTask] = [
         correct_action="flag",
         partial_credit_actions={"escalate": 0.6, "hold": 0.5},
         inspect_reveal="15 ATM withdrawals in 58 min across 4 ATMs. Pattern consistent with card clone.",
+        key_flags=["velocity_breach"],
     ),
 ]
 
@@ -219,6 +236,7 @@ MEDIUM_TASKS: List[PayOpsTask] = [
         partial_credit_actions={"flag": 0.5, "hold": 0.4},
         requires_investigation={"inspect"},
         inspect_reveal="Contract on file for €85k milestone. Receiver is licensed EU entity. Quarterly vendor pattern.",
+        key_flags=["cross_border", "high_value"],
     ),
     PayOpsTask(
         task_id="MED-002",
@@ -242,6 +260,7 @@ MEDIUM_TASKS: List[PayOpsTask] = [
         partial_credit_actions={"escalate": 0.6, "flag": 0.4},
         requires_investigation={"verify_kyc"},
         kyc_reveal="KYC renewal submitted 10 days ago. Both accounts share same UBO. Transfer aligns with Q1 plan.",
+        key_flags=["kyc_expiry_90d"],
     ),
     PayOpsTask(
         task_id="MED-003",
@@ -264,6 +283,7 @@ MEDIUM_TASKS: List[PayOpsTask] = [
         correct_action="flag",
         partial_credit_actions={"hold": 0.5, "escalate": 0.3},
         inspect_reveal="Historical monthly charge $149.99. This charge = 3-month annual upgrade. Merchant confirmation pending.",
+        key_flags=["amount_spike", "pattern_deviation"],
     ),
     PayOpsTask(
         task_id="MED-004",
@@ -286,6 +306,7 @@ MEDIUM_TASKS: List[PayOpsTask] = [
         correct_action="flag",
         partial_credit_actions={"escalate": 0.5, "hold": 0.4},
         inspect_reveal="Exchange licensed in sender's jurisdiction. Sender made 4 similar payments over 6 months. Within limits.",
+        key_flags=["crypto_exchange"],
     ),
     PayOpsTask(
         task_id="MED-005",
@@ -309,6 +330,7 @@ MEDIUM_TASKS: List[PayOpsTask] = [
         partial_credit_actions={"flag": 0.5, "escalate": 0.4},
         requires_investigation={"verify_kyc"},
         kyc_reveal="KYC expired 12 days ago due to administrative oversight. Re-submission in progress. No fraud indicators.",
+        key_flags=["kyc_expired"],
     ),
     PayOpsTask(
         task_id="MED-006",
@@ -332,6 +354,7 @@ MEDIUM_TASKS: List[PayOpsTask] = [
         partial_credit_actions={"flag": 0.4, "hold": 0.5},
         requires_investigation={"request_docs"},
         docs_reveal="Signed purchase agreement found. Escrow agent licensed and registered. Standard conveyancing practice.",
+        key_flags=["first_time_payee", "large_first_transfer"],
     ),
 ]
 
@@ -366,6 +389,7 @@ HARD_TASKS: List[PayOpsTask] = [
             "Account 7 days old. First outbound transfer. Receiver matches solicitor-impersonation "
             "mule pattern from last month's intelligence bulletin. ML underscored — new clean account."
         ),
+        key_flags=["solicitor_mule_pattern"],
     ),
     PayOpsTask(
         task_id="HARD-002",
@@ -392,6 +416,8 @@ HARD_TASKS: List[PayOpsTask] = [
             "Sender says they were called by someone claiming to be their bank. "
             "Instructed to move savings to a 'safe account'. Classic APP scam confirmed."
         ),
+        key_flags=["app_scam_indicator", "mule_account_pattern"],
+        network_graph={"victim": "henry@victim-bank.co.uk", "mule": "mule_relay_2287@fastpay.io"},
     ),
     PayOpsTask(
         task_id="HARD-003",
@@ -419,6 +445,8 @@ HARD_TASKS: List[PayOpsTask] = [
             "3 transactions in 24h: $9,450 + $9,200 + $9,100 from related accounts. "
             "Same UBO. KYC failed on inconsistent ID docs. Classic CTR structuring."
         ),
+        key_flags=["structuring_pattern", "ctr_threshold_avoidance"],
+        network_graph={"node_a": "irene_acct_A@shadow.net", "node_b": "irene_acct_B@shadow.net", "ubo": "irene_ubo"},
     ),
     PayOpsTask(
         task_id="HARD-004",
@@ -445,6 +473,8 @@ HARD_TASKS: List[PayOpsTask] = [
             "Both SWIFT BIC-verified. Part of daily USD/EUR FX settlement cycle. "
             "8 similar settlements this month, all cleared. Nostro/vostro agreement on file."
         ),
+        key_flags=["fx_settlement"],
+        network_graph={"correspondent": "nostro@bank-a-swift.com", "settlement": "vostro@bank-b-swift.com"},
     ),
     PayOpsTask(
         task_id="HARD-005",
@@ -478,6 +508,7 @@ HARD_TASKS: List[PayOpsTask] = [
             "Staff member claims it is a legitimate vendor. Unable to provide contract reference. "
             "Story changes on follow-up. Escalate to HR and Fraud immediately."
         ),
+        key_flags=["internal_to_personal", "unusual_beneficiary"],
     ),
     PayOpsTask(
         task_id="HARD-006",
@@ -507,6 +538,7 @@ HARD_TASKS: List[PayOpsTask] = [
             "Receiver dormant 5 years. 20 inbound transfers this week totalling €64k. "
             "All immediately forwarded offshore. Classic money-mule account reactivation."
         ),
+        key_flags=["dormant_receiver", "sudden_activity"],
     ),
 ]
 
@@ -544,6 +576,7 @@ CRITICAL_TASKS: List[PayOpsTask] = [
         chain_total=3,
         inspect_reveal="PE firm confirmed. Series B investment round. Deal announced in press last week.",
         docs_reveal="Signed SPA (Share Purchase Agreement) on file. Notarised. Receiver is the acquisition target.",
+        key_flags=["first_time_payee", "new_counterparty"],
     ),
     PayOpsTask(
         task_id="CRIT-002",
@@ -575,8 +608,8 @@ CRITICAL_TASKS: List[PayOpsTask] = [
             "3 accounts (ring_node_1/2/3) sending $4,900 / $4,850 / $4,750 simultaneously. "
             "All created same day. Receiver account drained offshore within minutes. "
             "SAR filing required under BSA §5318(g)."
-        ),
-    ),
+        ),        key_flags=["fraud_ring_indicator", "coordinated_transfers"],
+        network_graph={"ring_1": "ring_node_1@tempmail.com", "ring_2": "ring_node_2", "collector": "collector_hub@offshore.net"},    ),
     PayOpsTask(
         task_id="CRIT-003",
         difficulty="critical",
@@ -605,6 +638,8 @@ CRITICAL_TASKS: List[PayOpsTask] = [
         chain_total=3,
         docs_reveal="Invoice declares 500 units @ $1,360 each = $680k. Market price is $320/unit. 4× over-invoiced.",
         inspect_reveal="Shipping records show only 200 units dispatched. Payment/goods ratio 3.4× above market norm.",
+        key_flags=["invoice_mismatch", "trade_finance"],
+        network_graph={"importer": "importer@trade-co.hk", "exporter": "exporter@goods-supplier.cn"},
     ),
     PayOpsTask(
         task_id="CRIT-004",
@@ -636,6 +671,7 @@ CRITICAL_TASKS: List[PayOpsTask] = [
             "Physical travel impossible in 8 minutes. Likely credential compromise."
         ),
         contact_reveal="CEO confirms they did NOT initiate this transfer. Account takeover confirmed.",
+        key_flags=["geo_impossible_login", "account_takeover_indicator"],
     ),
 ]
 

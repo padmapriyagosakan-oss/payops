@@ -202,6 +202,10 @@ class PayOpsObservation(BaseModel):
         default=0.0, description="Total reward accumulated so far in this episode"
     )
     done: bool = Field(default=False, description="Whether the episode has ended")
+    network_graph: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Mule-chain / correspondent-bank relationship graph for tasks where present",
+    )
     info: Dict[str, Any] = Field(
         default_factory=dict,
         description="Extra diagnostic information (action taken, correct action, etc.)",
@@ -236,4 +240,8 @@ class PayOpsState(BaseModel):
         description="Recent completed task outcomes for analytics",
     )
     done: bool = False
+    episode_seed: Optional[int] = Field(
+        default=None,
+        description="Random seed used to jitter task parameters this episode (for reproducibility)",
+    )
 

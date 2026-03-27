@@ -144,11 +144,11 @@ async def run():
     for t in result.per_task_rewards:
         mark = "✓" if t["correct"] else "✗"
         print(
-            f"    {mark}  {t['task_id']:12s}  [{t['difficulty']:6s}]  "
-            f"action={t['action_taken']:10s}  "
-            f"correct={t['correct_action']:10s}  "
-            f"reward={t['reward']:+.2f}"
-        )
+        f"    {mark}  {t['task_id']:12s}  [{t['difficulty']:6s}]  "
+        f"action={t['terminal_action']:10s}  "
+        f"correct={t['correct_action']:10s}  "
+        f"reward={t['weighted_reward']:+.2f}"
+    )
 
     print("=" * 60)
     return result

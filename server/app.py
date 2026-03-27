@@ -378,7 +378,17 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/health", summary="Health check")
 async def health():
-    return {"status": "ok", "environment": "payops_env", "version": "2.0.0"}
+    state = _env.state()
+    return {
+        "status": "ok",
+        "environment": "payops_env",
+        "version": "2.0.0",
+        "episode_id": state.episode_id,
+        "episode_seed": state.episode_seed,
+        "current_task_id": state.current_task_id,
+        "transactions_processed": state.transactions_processed,
+        "total_tasks": state.total_tasks,
+    }
 
 
 # ---------------------------------------------------------------------------

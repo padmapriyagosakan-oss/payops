@@ -16,6 +16,8 @@ entry; the grader handles them as one decision unit.
 
 from __future__ import annotations
 
+import copy
+import random
 import uuid
 from collections import deque
 from typing import Deque, List, Optional
@@ -63,13 +65,28 @@ class PayOpsEnvironment:
     # ------------------------------------------------------------------
 
     async def reset_async(self) -> PayOpsObservation:
-        self._tasks = list(TASKS)
+        # --- per-episode jitter: prevents agent overfitting to fixed values ---
+        episode_seed = int(uuid.uuid4().int % 2**31)
+        rng = random.Random(episode_seed)
+        jittered: List[PayOpsTask] = []
+        for t in TASKS:
+            jt = copy.copy(t)
+            jt.amount     = round(t.amount * rng.uniform(0.85, 1.20), 2)
+            jt.risk_score = round(min(1.0, max(0.0, t.risk_score + rng.gauss(0, 0.03))), 4)
+            if t.velocity_1h  is not None:
+                jt.velocity_1h  = max(0, t.velocity_1h  + rng.randint(-3, 3))
+            if t.velocity_24h is not None:
+                jt.velocity_24h = max(0, t.velocity_24h + rng.randint(-3, 3))
+            jittered.append(jt)
+        self._tasks = jittered
         self._current_task = self._tasks[0]
         self._used_inv = {}
         self._sar_filed = set()
         self._recent_decisions = deque(maxlen=_RECENT_WINDOW)
+        self._episode_seed = episode_seed
         self._state = PayOpsState(
             episode_id=str(uuid.uuid4()),
+            episode_seed=episode_seed,
             step_count=0,
             current_task_id=self._current_task.task_id,
             transactions_processed=0,
@@ -283,6 +300,7 @@ class PayOpsEnvironment:
             reward=reward,
             cumulative_reward=self._state.cumulative_reward,
             done=done,
+            network_graph=getattr(task, "network_graph", None),
             info=info,
         )
 

@@ -222,15 +222,15 @@ The rule-based baseline agent uses a deterministic priority-ordered policy.
 
 | Metric | Baseline (v2, 20 tasks) |
 |--------|-------------------------|
-| Normalised score | ~0.65–0.72 |
+| Normalised score | 0.68–0.76 |
 | Passed (≥ 0.5) | Yes |
 | Strong at | Easy tasks, clear velocity/flag patterns |
 | Weak at | Hard adversarial tasks (HARD-001 model-poisoning, HARD-004 FX settlement) |
-| Critical coverage | Partial — misses SAR filing requirements on CRIT-001/003 |
+| Critical coverage | Partial — misses some SAR filing requirements |
 
-Run `POST /baseline` or `python inference.py` to reproduce.
+Scores vary slightly per run due to per-episode parameter jitter (see below).
 
-Run `POST /baseline` to reproduce these results programmatically.
+Run `POST /baseline` or `python payops_env/scripts/baseline_agent.py` to reproduce.
 
 ---
 
@@ -268,29 +268,41 @@ payops_env/
 | Creativity & novelty | Adversarial model-poisoning task; APP scam; AML structuring with SAR requirement; PEP detection |
 
 
-| Outcome                          | Reward |
-|----------------------------------|--------|
-| Correct action                   | +1.0   |
-| Approve a dangerous transaction  | -2.0   |
-| Wrong reject                     | -0.5   |
-| Wrong flag / escalate            | -0.25  |
+---
 
-## Quick Start
+## Reward Design (v2 — Trajectory-Based)
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
+Rewards are dense across the full trajectory, not just on the final decision:
 
-# Run the server
-uvicorn server.app:app --reload
+| Component | Value | Condition |
+|-----------|-------|-----------|
+| Correct terminal action | **+0.60** | per task |
+| Investigation sub-action | **+0.20** | per eligible sub-action, first use only |
+| Flag identification | **+0.20** | agent used `inspect` AND task has key diagnostic flags |
+| Confidence bonus | +0.10 | confidence ≥ 0.8 AND correct |
+| Confidence penalty | −0.10 | confidence ≥ 0.8 AND wrong |
+| Regulatory SAR bonus | +0.20 | `file_sar` before terminal on regulatory task |
+| Duplicate investigation | −0.05 | same sub-action used twice on same task |
+| Approve a fraud/sanctioned | **−1.00** | worst mistake |
 
-# Run the baseline agent (no server needed)
-python scripts/baseline_agent.py
-```
+Difficulty weights: easy×1.0, medium×1.2, hard×1.5, critical×2.0  
+Episode score is **strictly clamped to `[0.0, 1.0]`**.  Passing threshold: **0.5**.
 
-## Docker
+### Per-Episode Parameter Jitter
 
-```bash
-docker build -t payops-env:latest .
-docker run -p 8000:8000 payops-env:latest
-```
+Each `POST /reset` generates a unique `episode_seed` and applies small random perturbations to prevent agent overfitting:
+
+| Field | Jitter |
+|-------|--------|
+| `amount` | × Uniform(0.85, 1.20) |
+| `risk_score` | + Gauss(0, 0.03), clamped [0,1] |
+| `velocity_1h` | + Randint(−3, +3), min 0 |
+| `velocity_24h` | + Randint(−3, +3), min 0 |
+
+The `correct_action` and all ground-truth labels are **never changed** — only the observable values the agent uses to make decisions.
+
+The `episode_seed` is returned by `GET /health` and `GET /state` for reproducibility.
+
+### Network Graph
+
+Selected tasks include a `network_graph` field in the observation exposing mule-chain / correspondent-banking relationships (e.g. victim → mule → offshore). This gives agents richer context for complex fraud patterns.
