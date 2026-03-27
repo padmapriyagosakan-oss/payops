@@ -27,18 +27,23 @@ COPY . /app/payops_env
 # Put parent directory on PYTHONPATH so `payops_env` is importable
 ENV PYTHONPATH="/app:${PYTHONPATH}"
 
-# HuggingFace Spaces requires port 7860; default to 8000 locally
+# HuggingFace Spaces requires port 7860; default to 7860
 ENV PORT=7860
+
+# Runtime env vars (overridden at deploy time via HF Space secrets)
+ENV API_BASE_URL="" \
+    MODEL_NAME="" \
+    HF_TOKEN="" \
+    PAYOPS_BASE_URL="http://localhost:7860"
 
 # Switch to non-root user
 USER appuser
 
 EXPOSE 7860
-EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
-CMD ["sh", "-c", "uvicorn payops_env.server.app:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "uvicorn payops_env.server.app:app --host 0.0.0.0 --port ${PORT} --workers 1"]
 

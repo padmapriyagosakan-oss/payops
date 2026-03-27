@@ -143,11 +143,13 @@ class PayOpsEnvironment:
                 )
                 reveal_field = "docs_notes"
 
+            used_so_far = list(self._used_inv.get(task_id, set()))
             info = {
-                "event":        action_type,
-                "already_used": already,
-                reveal_field:   reveal_text,
-                "budget_remaining": round(
+                "event":               action_type,
+                "already_used":        already,
+                "investigation_used":  used_so_far,  # full list for this task
+                reveal_field:          reveal_text,
+                "budget_remaining":    round(
                     self.BUDGET_LIMIT - self._state.budget_spent, 4
                 ),
             }

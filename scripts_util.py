@@ -41,7 +41,13 @@ def _should_investigate(obs) -> Optional[str]:
       4. contact_sender: APP scam pattern or insider threat
       5. file_sar: if structuring/fraud-ring flags and not yet filed
     """
-    already = set(obs.info.get("investigation_used", []) if isinstance(obs.info, dict) else [])
+    # The env sets both "already_used" (bool for this action) and
+    # "investigation_used" (list of all inv actions used for this task)
+    if isinstance(obs.info, dict):
+        inv_used = obs.info.get("investigation_used", [])
+        already = set(inv_used) if isinstance(inv_used, (list, set)) else set()
+    else:
+        already = set()
 
     # file_sar if structuring / fraud ring and SAR not yet filed
     sar_flags = {"structuring_pattern", "ctr_threshold_avoidance",

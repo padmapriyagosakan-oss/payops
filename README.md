@@ -19,10 +19,11 @@ Authorised Push Payment (APP) scams.
 
 ## Environment Description
 
-Each **episode** steps through 12 transactions (4 easy, 4 medium, 4 hard).
-For each transaction the agent observes a rich set of signals and submits one
-of six possible actions.  A reward is returned immediately, and the next
-transaction is presented until the episode is complete.
+Each **episode** steps through all **20 transactions** (4 easy, 6 medium, 6 hard, 4 critical).
+For each transaction the agent observes a rich set of signals and chooses one
+of **10 possible actions** — 5 terminal decisions and 5 investigation sub-actions.
+A reward is returned immediately, and the next transaction is presented until
+the episode is complete.
 
 ---
 
@@ -78,7 +79,7 @@ transaction is presented until the episode is complete.
 | EASY-003 | Standard refund to verified customer; tiny amount, no flags | `approve` |
 | EASY-004 | ATM withdrawal burst — 15 withdrawals in 58 minutes | `flag` |
 
-### Medium (4 tasks — ambiguous, multi-signal reasoning required)
+### Medium (6 tasks — ambiguous, multi-signal reasoning required)
 
 | ID       | Description | Correct Action |
 |---------|-------------|----------------|
@@ -86,15 +87,28 @@ transaction is presented until the episode is complete.
 | MED-002 | Internal treasury transfer; large amount, KYC pending renewal | `hold` |
 | MED-003 | Recurring subscription 3× higher than historical average | `flag` |
 | MED-004 | Payment to licensed crypto exchange from verified personal account | `flag` |
+| MED-005 | Payroll disbursement to 40 employees from new payroll account | `approve` |
+| MED-006 | Cross-border remittance to high-risk corridor; regular migrant-worker pattern | `hold` |
 
-### Hard (4 tasks — adversarial / edge-case)
+### Hard (6 tasks — adversarial / edge-case)
 
 | ID        | Description | Correct Action |
 |----------|-------------|----------------|
 | HARD-001 | Fraud model poisoning: risk_score=0.18 but manual signals scream escalate | `escalate` |
 | HARD-002 | APP (Authorised Push Payment) scam: victim sending willingly to mule account | `reject` |
-| HARD-003 | Structuring / smurfing: three just-below-CTR-threshold payments, same UBO | `reject` |
+| HARD-003 | Structuring / smurfing: just-below-CTR-threshold payments, same UBO | `reject` |
 | HARD-004 | Legitimate FX correspondent banking settlement — looks alarming, is not | `approve` |
+| HARD-005 | Insider threat: employee initiating transfers to personal family accounts | `escalate` |
+| HARD-006 | Zero-day mule account: new account receiving high-velocity micro-deposits | `reject` |
+
+### Critical (4 tasks — regulatory + multi-step investigation chains)
+
+| ID        | Description | Correct Action |
+|----------|-------------|----------------|
+| CRIT-001 | AML structuring ring: requires inspection + SAR filing before terminal action | `reject` + `file_sar` |
+| CRIT-002 | KYC expiry bypass: counterparty exploiting grace period; verify_kyc needed | `hold` |
+| CRIT-003 | Sanctions evasion via shell company chain; contact_sender + escalate required | `escalate` |
+| CRIT-004 | Politically Exposed Person (PEP) large transfer to unknown shell entity | `escalate` |
 
 ---
 
@@ -206,13 +220,15 @@ print(f"Episode score: {score['normalised_score']:.4f}")
 
 The rule-based baseline agent uses a deterministic priority-ordered policy.
 
-| Metric | Baseline |
-|--------|----------|
-| Normalised score | ~0.67 |
-| Total reward | ~8.0 / 12.0 |
-| Passed | Yes |
+| Metric | Baseline (v2, 20 tasks) |
+|--------|-------------------------|
+| Normalised score | ~0.65–0.72 |
+| Passed (≥ 0.5) | Yes |
 | Strong at | Easy tasks, clear velocity/flag patterns |
-| Weak at | Hard adversarial tasks (e.g. FX settlement over-rejected) |
+| Weak at | Hard adversarial tasks (HARD-001 model-poisoning, HARD-004 FX settlement) |
+| Critical coverage | Partial — misses SAR filing requirements on CRIT-001/003 |
+
+Run `POST /baseline` or `python inference.py` to reproduce.
 
 Run `POST /baseline` to reproduce these results programmatically.
 
@@ -224,15 +240,17 @@ Run `POST /baseline` to reproduce these results programmatically.
 payops_env/
 ├── models.py              # PayOpsAction, PayOpsObservation, PayOpsState (Pydantic)
 ├── environment.py         # PayOpsEnvironment — reset_async / step_async / state
-├── tasks.py               # 12 tasks (easy / medium / hard) with ground-truth labels
+├── tasks.py               # 20 tasks (EASY×4, MED×6, HARD×6, CRIT×4) with ground-truth labels
 ├── grader.py              # Partial-credit reward function + episode grader
 ├── scripts_util.py        # Baseline runner helper (used by /baseline endpoint)
 ├── scripts/
 │   └── baseline_agent.py  # Standalone rule-based baseline agent
 ├── server/
 │   └── app.py             # FastAPI server with all required endpoints
-├── openenv.yaml           # OpenEnv manifest
-├── Dockerfile             # Docker / HuggingFace Space container
+├── inference.py           # Competition inference script (OpenAI client, root-level)
+├── validate.py            # Pre-submission checklist validator
+├── openenv.yaml           # OpenEnv manifest v2.0.0
+├── Dockerfile             # Docker / HuggingFace Space container (port 7860)
 ├── requirements.txt       # Python dependencies
 └── README.md              # This file
 ```
@@ -243,11 +261,11 @@ payops_env/
 
 | Criterion | Implementation |
 |-----------|---------------|
-| Real-world utility | Payment fraud and compliance triage — a genuine operational domain |
-| Task & grader quality | 12 tasks across 3 difficulty tiers; partial-credit grader; clear pass/fail |
-| Environment design | Rich observation space; 6-action space; inspect mechanic; episode state tracking |
-| Code quality & spec compliance | Pydantic v2 models; async API; all required endpoints; openenv.yaml |
-| Creativity & novelty | Adversarial model-poisoning task; APP scam; FX settlement edge-case |
+| Real-world utility | Payment fraud and compliance triage — deployed daily by fintech ops teams worldwide |
+| Task & grader quality | 20 tasks across 4 difficulty tiers (easy→critical); partial-credit grader; clear pass/fail |
+| Environment design | 30-field observation space; 10-action space (5 terminal + 5 investigation); budget mechanic; episode state tracking |
+| Code quality & spec compliance | Pydantic v2 models; async API; all 11 required endpoints; openenv.yaml v2; Dockerfile; validate.py |
+| Creativity & novelty | Adversarial model-poisoning task; APP scam; AML structuring with SAR requirement; PEP detection |
 
 
 | Outcome                          | Reward |
