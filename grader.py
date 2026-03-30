@@ -43,8 +43,8 @@ from payops_env.tasks import ACTION_COSTS, PayOpsTask
 # Constants
 # ---------------------------------------------------------------------------
 
-# Terminal-action credit (correct action gets this, not the old 1.0 full credit)
-TERMINAL_CORRECT      = 0.60
+# Terminal-action credit: correct action earns full credit
+TERMINAL_CORRECT      = 1.0
 FULL_CREDIT           = TERMINAL_CORRECT  # alias for backward compat
 
 WRONG_APPROVE_FRAUD   = -1.0
@@ -53,7 +53,7 @@ WRONG_REJECT_GOOD     = -0.5
 WRONG_DEFAULT         = -0.25
 
 # Investigation trajectory bonuses
-INVESTIGATION_BONUS         = 0.20   # per eligible sub-action used (first use)
+INVESTIGATION_BONUS         = 0.15   # per eligible sub-action used (first use)
 FLAG_IDENTIFICATION_BONUS   = 0.20   # agent ran inspect AND all key_flags are in obs
 TIME_PENALTY_PER_EXTRA_STEP = 0.05   # duplicate investigation on same task
 
@@ -74,8 +74,8 @@ INVESTIGATION_ACTIONS: Set[str] = {
 }
 
 # Maximum achievable reward per task at weight=1.0 (used for normalisation)
-# correct terminal (0.6) + up to 1 inv bonus (0.2) + flag id bonus (0.2)
-_MAX_TASK_RAW = TERMINAL_CORRECT + INVESTIGATION_BONUS + FLAG_IDENTIFICATION_BONUS
+# correct terminal (1.0); investigation bonuses are extra and clamped at 1.0
+_MAX_TASK_RAW = TERMINAL_CORRECT
 
 
 # ---------------------------------------------------------------------------

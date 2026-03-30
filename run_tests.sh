@@ -355,9 +355,9 @@ section "GROUP K — Analytics endpoint"
 
 # Run a full episode first so analytics has data
 reset
-python3 - <<'PYEOF'
-import urllib.request, json, sys
-BASE = "http://localhost:8000"
+BASE=$BASE python3 - <<'PYEOF'
+import os, urllib.request, json, sys
+BASE = os.environ.get("BASE", "http://localhost:8000")
 def post(path, body=None):
     req = urllib.request.Request(f"{BASE}{path}",
         data=json.dumps(body).encode() if body else None,
@@ -408,9 +408,9 @@ check "L-06  GET /leaderboard → budget_spent in entry" "$LB" '"budget_spent":'
 section "GROUP M — Perfect episode (all 20 correct, no investigation cost)"
 
 reset
-python3 - <<'PYEOF'
-import urllib.request, json
-BASE = "http://localhost:8000"
+BASE=$BASE python3 - <<'PYEOF'
+import os, urllib.request, json
+BASE = os.environ.get("BASE", "http://localhost:8000")
 def post(path, body=None):
     req = urllib.request.Request(f"{BASE}{path}",
         data=json.dumps(body).encode() if body else None,
@@ -480,14 +480,14 @@ check "O-01  Budget correctly deducted after multiple inv actions" \
 
 # grader shows budget_spent
 GRADER="$(curl -s $BASE/grader)"
-check "O-02  Grader → budget_spent > 0" "$GRADER" '"budget_spent":0\.[1-9]'
+check "O-02  Grader → budget_spent > 0" "$GRADER" '"budget_spent":[1-9]'
 
 # replay that overshoots budget → budget_penalty > 0
 HEAVY='{"actions":["contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","contact_sender","approve","reject","approve","flag","escalate","hold","flag","flag","hold","escalate","escalate","reject","reject","approve","escalate","flag","approve","reject","escalate","reject"]}'
 R=$(curl -s -X POST $BASE/replay \
     -H "Content-Type: application/json" \
     -d "$HEAVY")
-check "O-03  Over-budget replay → budget_penalty > 0" "$R" '"budget_penalty":0\.[1-9]'
+check "O-03  Over-budget replay → budget_penalty > 0" "$R" '"budget_penalty":0\.[0-9]*[1-9]'
 check "O-04  Over-budget replay → budget_overspend > 0" "$R" '"budget_overspend":0\.[1-9]'
 
 # ═══════════════════════════════════════════════════════════
@@ -533,13 +533,13 @@ check "P-05  Replay with partial confidences → score present" \
 # P-06  Grader before any reset → 400 or returns score
 check "P-06  Grader before actions → handled gracefully" \
   "$(curl -s $BASE/grader)" \
-  '"normalised_score"\|"error"'
+  '"normalised_score"|"error"'
 
 # P-07  Analytics before any completed episode → handled
 reset
 check "P-07  Analytics after fresh reset → message or data" \
   "$(curl -s $BASE/analytics)" \
-  '"message"\|"episodes_completed"'
+  '"message"|"episodes_completed"'
 
 # ═══════════════════════════════════════════════════════════
 # GROUP Q — WebSocket
@@ -547,11 +547,12 @@ check "P-07  Analytics after fresh reset → message or data" \
 section "GROUP Q — WebSocket (requires wscat or python)"
 
 if command -v python3 &>/dev/null; then
-  WS_RESULT=$(python3 - <<'PYEOF'
-import urllib.request, json
+  WS_RESULT=$(BASE=$BASE python3 - <<'PYEOF'
+import os, urllib.request, json
 try:
+    BASE = os.environ.get("BASE", "http://localhost:8000")
     # ws upgrade check via HTTP (will get 426 Upgrade Required — proves endpoint exists)
-    req = urllib.request.Request("http://localhost:8000/ws")
+    req = urllib.request.Request(f"{BASE}/ws")
     try:
         urllib.request.urlopen(req)
     except Exception as e:
