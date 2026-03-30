@@ -352,6 +352,17 @@ async def leaderboard():
 # WebSocket endpoint for persistent sessions
 # ---------------------------------------------------------------------------
 
+@app.get("/ws", include_in_schema=False)
+async def ws_http_upgrade():
+    """Return 426 Upgrade Required for plain HTTP requests to the WS endpoint."""
+    from fastapi.responses import Response
+    return Response(
+        content="WebSocket upgrade required",
+        status_code=426,
+        headers={"Upgrade": "websocket"},
+    )
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """

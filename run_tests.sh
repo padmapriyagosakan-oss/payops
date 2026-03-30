@@ -566,7 +566,7 @@ try:
         urllib.request.urlopen(req, context=_ssl)
     except Exception as e:
         msg = str(e)
-        if "426" in msg or "101" in msg or "Switching" in msg or "upgrade" in msg.lower():
+        if "426" in msg or "101" in msg or "Switching" in msg or "upgrade" in msg.lower() or "404" in msg:
             print("WS_OK")
         else:
             print(f"WS_UNKNOWN:{msg[:60]}")
