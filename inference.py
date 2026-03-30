@@ -43,10 +43,14 @@ except ImportError:
 
 # ── Config ─────────────────────────────────────────────────────────────────
 
-API_BASE_URL: str = os.environ.get("API_BASE_URL", "").rstrip("/")
-MODEL_NAME: str   = os.environ.get("MODEL_NAME", "")
-HF_TOKEN: str     = os.environ.get("HF_TOKEN", "")
-PAYOPS_URL: str   = os.environ.get("PAYOPS_BASE_URL", "http://localhost:7860").rstrip("/")
+API_BASE_URL: str    = os.environ.get("API_BASE_URL", "").rstrip("/")
+MODEL_NAME: str      = os.environ.get("MODEL_NAME", "")
+# OPENAI_API_KEY is the spec-standard credential; HF_TOKEN is the HF-native alias.
+# OPENAI_API_KEY takes precedence when both are set.
+OPENAI_API_KEY: str  = os.environ.get("OPENAI_API_KEY", "")
+HF_TOKEN: str        = os.environ.get("HF_TOKEN", "")
+_API_KEY: str        = OPENAI_API_KEY or HF_TOKEN   # resolved credential
+PAYOPS_URL: str      = os.environ.get("PAYOPS_BASE_URL", "http://localhost:7860").rstrip("/")
 
 VALID_ACTIONS = {
     "approve", "reject", "flag", "escalate", "hold",
@@ -99,6 +103,25 @@ def _make_request(url: str, method: str = "GET", body: Optional[dict] = None) ->
     except urllib.error.HTTPError as e:
         err_body = e.read().decode()
         raise RuntimeError(f"HTTP {e.code} from {url}: {err_body}") from e
+
+
+def _unwrap_response(resp: dict) -> dict:
+    """
+    Normalise server responses that may use the official OpenEnv wire format
+    ``{"observation": {...}, "reward": ..., "done": ...}`` or the legacy flat
+    format where the observation fields are at the top level.  Always returns
+    a flat observation dict with ``reward`` and ``done`` populated.
+    """
+    if "observation" in resp and isinstance(resp["observation"], dict):
+        obs = dict(resp["observation"])
+        # Promote top-level reward/done into the obs dict for uniform access
+        if "reward" in resp:
+            obs["reward"] = resp["reward"]
+        if "done" in resp:
+            obs["done"] = resp["done"]
+        return obs
+    # Legacy flat format — already the observation
+    return resp
 
 
 def build_observation_text(obs: dict) -> str:
@@ -157,7 +180,11 @@ def run_inference() -> dict:
     Returns the grader result dict.
     """
     # ── validate env vars ───────────────────────────────────────────────
-    missing = [v for v in ("API_BASE_URL", "MODEL_NAME", "HF_TOKEN") if not os.environ.get(v)]
+    # OPENAI_API_KEY or HF_TOKEN must be set (either is acceptable)
+    if not _API_KEY:
+        print("ERROR: Set OPENAI_API_KEY (or HF_TOKEN) with your API credential.", file=sys.stderr)
+        sys.exit(1)
+    missing = [v for v in ("API_BASE_URL", "MODEL_NAME") if not os.environ.get(v)]
     if missing:
         print(f"ERROR: Missing required environment variables: {', '.join(missing)}", file=sys.stderr)
         sys.exit(1)
@@ -170,7 +197,7 @@ def run_inference() -> dict:
 
     # ── init OpenAI client ──────────────────────────────────────────────
     client = OpenAI(
-        api_key=HF_TOKEN,
+        api_key=_API_KEY,
         base_url=API_BASE_URL,
     )
 
@@ -183,7 +210,9 @@ def run_inference() -> dict:
         sys.exit(1)
 
     # ── reset environment ────────────────────────────────────────────────
-    obs = _make_request(f"{PAYOPS_URL}/reset", method="POST")
+    _reset_resp = _make_request(f"{PAYOPS_URL}/reset", method="POST")
+    # Support official wrapped format {"observation":{...},"reward":...} and legacy flat format
+    obs = _unwrap_response(_reset_resp)
     print(f"Episode start : task={obs['task_id']}, budget={obs['budget_remaining']}")
     print()
 
@@ -217,7 +246,7 @@ def run_inference() -> dict:
 
         # Step
         try:
-            result = _make_request(
+            _step_resp = _make_request(
                 f"{PAYOPS_URL}/step",
                 method="POST",
                 body={"action_type": action, "transaction_id": obs.get("transaction_id")},
@@ -226,15 +255,15 @@ def run_inference() -> dict:
             print(f"  Step error: {e}", file=sys.stderr)
             break
 
-        reward   = result.get("reward", 0)
-        new_task = result.get("task_id", "?")
+        # Unwrap official {"observation":{...},"reward":...} or legacy flat format
+        obs = _unwrap_response(_step_resp)
+        reward   = obs.get("reward", 0)
+        new_task = obs.get("task_id", "?")
         step_count += 1
 
         marker = "✓" if reward > 0 else ("✗" if reward < 0 else "·")
         print(f"  [{marker}] {task_id:12s} → {action:15s}  reward={reward:+.3f}  "
-              f"budget={result.get('budget_remaining', 0):.2f}")
-
-        obs = result
+              f"budget={obs.get('budget_remaining', 0):.2f}")
 
     elapsed = time.time() - start_time
     print(f"\nEpisode complete: {step_count} steps in {elapsed:.1f}s")

@@ -44,6 +44,10 @@ class PayOpsAction(BaseModel):
         le=1.0,
         description="Agent self-reported confidence [0, 1]. Used in reward shaping.",
     )
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional pass-through metadata (openenv.core.Action compatibility).",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +213,45 @@ class PayOpsObservation(BaseModel):
     info: Dict[str, Any] = Field(
         default_factory=dict,
         description="Extra diagnostic information (action taken, correct action, etc.)",
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional pass-through metadata (openenv.core.Observation compatibility).",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Reward breakdown (typed model for openenv.core spec compliance)
+# ---------------------------------------------------------------------------
+
+class PayOpsReward(BaseModel):
+    """
+    Typed reward model returned alongside each observation.
+
+    ``value`` is the normalised reward \u2208 [0.0, 1.0] for the episode so far.
+    ``breakdown`` itemises the components that contributed to the raw score.
+    """
+
+    value: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Normalised episode reward \u2208 [0.0, 1.0]",
+    )
+    breakdown: Dict[str, float] = Field(
+        default_factory=dict,
+        description=(
+            "Per-component reward breakdown: terminal_correct, investigation_bonus, "
+            "flag_identification_bonus, confidence_bonus, duplicate_penalty, budget_penalty"
+        ),
+    )
+    raw_total: float = Field(
+        default=0.0,
+        description="Raw (un-normalised) sum of reward components before clamping",
+    )
+    max_possible: float = Field(
+        default=1.0,
+        description="Maximum achievable raw reward for this episode",
     )
 
 

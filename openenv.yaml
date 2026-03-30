@@ -35,6 +35,11 @@ endpoints:
 
 # ── Environment variables required at runtime ────────────────────────────────
 env_vars:
+  OPENAI_API_KEY:
+    description: "API key for OpenAI-compatible inference endpoint (takes precedence over HF_TOKEN)"
+    required: false
+    secret: true
+    example: "sk-..."
   API_BASE_URL:
     description: "OpenAI-compatible API endpoint for LLM inference"
     required: true
@@ -44,8 +49,8 @@ env_vars:
     required: true
     example: "gpt-4o-mini"
   HF_TOKEN:
-    description: "Hugging Face / API key used as Bearer credential"
-    required: true
+    description: "Hugging Face / API key used as Bearer credential (alias for OPENAI_API_KEY)"
+    required: false
     secret: true
 
 # ── Action space ─────────────────────────────────────────────────────────────

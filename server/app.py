@@ -27,11 +27,11 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from payops_env.environment import PayOpsEnvironment, VALID_ACTIONS
 from payops_env.grader import grade_episode
-from payops_env.models import PayOpsAction, PayOpsObservation, PayOpsState
+from payops_env.models import PayOpsAction, PayOpsObservation, PayOpsState, PayOpsReward
 from payops_env.tasks import TASKS, TASKS_BY_ID
 
 
@@ -62,11 +62,55 @@ _leaderboard: List[Dict[str, Any]] = []
 # Request / response helpers
 # ---------------------------------------------------------------------------
 
-class StepRequest(BaseModel):
-    action_type: str
-    transaction_id: str
+class ResetRequest(BaseModel):
+    """POST /reset body — compatible with openenv.core ResetRequest."""
+    seed: Optional[int] = None
+    episode_id: Optional[str] = None
+
+
+class UnifiedStepRequest(BaseModel):
+    """
+    POST /step body — accepts both the official openenv wire format::
+
+        {"action": {"action_type": "approve", "transaction_id": "TXN-E001"},
+         "timeout_s": null}
+
+    and the legacy flat format (backward compat)::
+
+        {"action_type": "approve", "transaction_id": "TXN-E001"}
+    """
+    model_config = ConfigDict(extra="allow")
+
+    # Official openenv wire fields
+    action: Optional[Dict[str, Any]] = None
+    timeout_s: Optional[float] = None
+    request_id: Optional[str] = None
+
+    # Legacy flat fields
+    action_type: Optional[str] = None
+    transaction_id: Optional[str] = None
     reason: Optional[str] = None
     confidence: Optional[float] = None
+
+    def resolved_action(self) -> PayOpsAction:
+        """Parse the action from whichever format was supplied."""
+        if self.action is not None:
+            return PayOpsAction(**self.action)
+        if self.action_type is None:
+            raise HTTPException(status_code=422, detail="action_type is required")
+        return PayOpsAction(
+            action_type=self.action_type,
+            transaction_id=self.transaction_id or "",
+            reason=self.reason,
+            confidence=self.confidence,
+        )
+
+
+class EnvResponse(BaseModel):
+    """Standard openenv wire response: observation dict + reward + done."""
+    observation: Dict[str, Any]
+    reward: Optional[float] = None
+    done: bool = False
 
 
 class BaselineResult(BaseModel):
@@ -85,45 +129,42 @@ class ReplayRequest(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@app.post("/reset", response_model=PayOpsObservation, summary="Reset the environment")
-async def reset():
+@app.post("/reset", response_model=EnvResponse, summary="Reset the environment")
+async def reset(request: ResetRequest = ResetRequest()):
     """Reset the environment and return the first transaction observation."""
     global _episode_actions, _episode_tasks, _episode_confs
     _episode_actions = []
     _episode_confs   = []
     _episode_tasks   = list(TASKS)
-    obs = await _env.reset_async()
-    return obs
+    obs = await _env.reset_async(seed=request.seed, episode_id=request.episode_id)
+    return EnvResponse(observation=obs.model_dump(), reward=None, done=False)
 
 
-@app.post("/step", response_model=PayOpsObservation, summary="Execute an action")
-async def step(request: StepRequest):
+@app.post("/step", response_model=EnvResponse, summary="Execute an action")
+async def step(request: UnifiedStepRequest):
     """
     Submit an action for the current transaction.
 
-    Valid action_type values:
-      Terminal:      approve | reject | flag | escalate | hold
-      Investigation: inspect | request_docs | verify_kyc | contact_sender | file_sar
+    Accepts both the official openenv wire format
+    ``{"action": {"action_type": "...", "transaction_id": "..."}, "timeout_s": null}``
+    and the legacy flat format
+    ``{"action_type": "...", "transaction_id": "..."}``.  Returns
+    ``{"observation": {...}, "reward": <float>, "done": <bool>}``.
     """
-    if request.action_type.lower() not in VALID_ACTIONS:
+    action = request.resolved_action()
+    if action.action_type.lower() not in VALID_ACTIONS:
         raise HTTPException(
             status_code=422,
-            detail=f"Invalid action_type '{request.action_type}'. "
+            detail=f"Invalid action_type '{action.action_type}'. "
                    f"Valid values: {sorted(VALID_ACTIONS)}",
         )
-    action = PayOpsAction(
-        action_type=request.action_type,
-        transaction_id=request.transaction_id,
-        reason=request.reason,
-        confidence=request.confidence,
-    )
     try:
         obs = await _env.step_async(action)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    _episode_actions.append(request.action_type.lower())
-    _episode_confs.append(request.confidence)
+    _episode_actions.append(action.action_type.lower())
+    _episode_confs.append(action.confidence)
 
     # Auto-save completed episode to leaderboard
     if obs.done:
@@ -143,7 +184,7 @@ async def step(request: StepRequest):
             }
         )
 
-    return obs
+    return EnvResponse(observation=obs.model_dump(), reward=obs.reward, done=obs.done)
 
 
 @app.get("/state", response_model=PayOpsState, summary="Get internal environment state")
@@ -395,15 +436,11 @@ async def health():
 # Entry point
 # ---------------------------------------------------------------------------
 
-def main(host: str = "0.0.0.0", port: int = 8000):
+def main(host: str = "0.0.0.0", port: int = int(__import__("os").environ.get("PORT", "8000"))):
     import uvicorn
     uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8000)
-    args = parser.parse_args()
-    main(port=args.port)
+    main()
 

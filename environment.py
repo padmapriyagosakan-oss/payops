@@ -64,9 +64,14 @@ class PayOpsEnvironment:
     # OpenEnv API
     # ------------------------------------------------------------------
 
-    async def reset_async(self) -> PayOpsObservation:
+    async def reset_async(
+        self,
+        seed: Optional[int] = None,
+        episode_id: Optional[str] = None,
+    ) -> PayOpsObservation:
         # --- per-episode jitter: prevents agent overfitting to fixed values ---
-        episode_seed = int(uuid.uuid4().int % 2**31)
+        # Use caller-supplied seed when provided (enables reproducibility).
+        episode_seed = seed if seed is not None else int(uuid.uuid4().int % 2**31)
         rng = random.Random(episode_seed)
         jittered: List[PayOpsTask] = []
         for t in TASKS:
@@ -85,7 +90,7 @@ class PayOpsEnvironment:
         self._recent_decisions = deque(maxlen=_RECENT_WINDOW)
         self._episode_seed = episode_seed
         self._state = PayOpsState(
-            episode_id=str(uuid.uuid4()),
+            episode_id=episode_id if episode_id is not None else str(uuid.uuid4()),
             episode_seed=episode_seed,
             step_count=0,
             current_task_id=self._current_task.task_id,
