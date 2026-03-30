@@ -301,6 +301,7 @@ class PayOpsEnvironment:
             steps_remaining=steps_remaining,
             action_cost=ACTION_COSTS.get(info.get("event", ""), 0.0),
             budget_remaining=round(self.BUDGET_LIMIT - self._state.budget_spent, 4),
+            investigation_hints=sorted(getattr(task, "requires_investigation", set()) or []),
             recent_decisions=list(self._recent_decisions),
             reward=reward,
             cumulative_reward=self._state.cumulative_reward,

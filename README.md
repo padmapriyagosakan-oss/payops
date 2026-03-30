@@ -92,11 +92,12 @@ Investigation sub-actions (with budget cost) reveal more information and let the
 | `chain_context`         | `str?`            | Accumulated summary of findings from earlier chain steps |
 | `steps_remaining`       | `int?`            | Investigation sub-steps remaining before a terminal decision is required |
 | `action_cost`           | `float`           | Budget cost incurred by the last action |
-| `budget_remaining`      | `float [0,1]`     | Fraction of investigation budget remaining (1.0 = full, 0.0 = exhausted) |
+| `budget_remaining`      | `float`           | Remaining investigation budget (starts at 5.0; decreases with each investigation action) |
 | `inspection_notes`      | `str?`            | Additional details revealed after an `inspect` action |
 | `docs_notes`            | `str?`            | Document review findings after a `request_docs` action |
 | `kyc_notes`             | `str?`            | KYC re-verification outcome after a `verify_kyc` action |
 | `contact_notes`         | `str?`            | Outcome after a `contact_sender` action |
+| `investigation_hints`   | `List[str]`       | Sub-actions recommended for this task (e.g. `inspect`, `verify_kyc`). Using them before the terminal decision earns bonus reward. Empty = no specific investigation required. |
 | `recent_decisions`      | `List[dict]`      | Last ≤3 completed decisions in this episode (for pattern context) |
 | `network_graph`         | `dict?`           | Mule-chain / correspondent-bank relationship graph where present |
 | `task_id`               | `str`             | Identifier of the active task |
@@ -278,18 +279,18 @@ Run `POST /baseline` to reproduce.
 
 ### LLM baseline (`inference.py` — `llama-3.1-8b-instant` via Groq)
 
-Run on 30 March 2026 against the live HF Space (`https://padmapriyagosakan-payops-env.hf.space`), seed 42 (reproducible).
+Run locally against seed 42 (reproducible) with investigation sub-actions enabled.
 
 | Metric | llama-3.1-8b-instant (Groq) |
 |--------|-----------------------------|
-| Normalised score | **0.4755** |
-| Total reward | 13.410 / 28.200 max |
+| Normalised score | **0.6028** |
+| Total reward | 17.000 / 28.200 max |
 | Tasks correct | 6 / 20 (30%) |
-| Budget spent | 0.00 / 5.00 |
-| Budget penalty | 0.00 |
-| Episode steps | 20 (all tasks completed) |
-| Duration | ~62 s |
-| Passed (≥ 0.5) | **NO ✗** |
+| Budget spent | 5.50 / 5.00 |
+| Budget penalty | 0.05 |
+| Episode steps | 57 (incl. investigation sub-actions) |
+| Duration | ~290 s |
+| Passed (≥ 0.5) | **YES ✓** |
 | Seed | 42 (fixed — deterministic across re-runs) |
 
 **Per-task decisions:**
@@ -297,27 +298,27 @@ Run on 30 March 2026 against the live HF Space (`https://padmapriyagosakan-payop
 | Task | LLM Action | Correct Action | Weighted Reward |
 |------|-----------|----------------|----------------|
 | EASY-001 | `approve` | `approve` | +1.000 ✓ |
-| EASY-002 | `flag` | `reject` | +0.200 (partial) |
+| EASY-002 | `flag` | `reject` | −0.250 ✗ (flag no longer partial credit) |
 | EASY-003 | `approve` | `approve` | +1.000 ✓ |
 | EASY-004 | `flag` | `flag` | +1.000 ✓ |
-| MED-001 | `flag` | `escalate` | +0.600 (partial) |
-| MED-002 | `flag` | `hold` | +0.480 (partial) |
+| MED-001 | `flag` | `escalate` | +0.900 (partial + investigation bonus) |
+| MED-002 | `flag` | `hold` | +0.540 (partial + investigation bonus) |
 | MED-003 | `flag` | `flag` | +1.200 ✓ |
 | MED-004 | `flag` | `flag` | +1.200 ✓ |
-| MED-005 | `flag` | `hold` | +0.600 (partial) |
-| MED-006 | `flag` | `escalate` | +0.480 (partial) |
-| HARD-001 | `flag` | `escalate` | +0.900 (partial) |
-| HARD-002 | `flag` | `reject` | +0.450 (partial) |
-| HARD-003 | `flag` | `reject` | +0.300 (partial) |
-| HARD-004 | `flag` | `approve` | +0.450 (partial) |
-| HARD-005 | `flag` | `escalate` | +0.750 (partial) |
-| HARD-006 | `flag` | `flag` | +1.500 ✓ |
-| CRIT-001 | `flag` | `approve` | +0.600 (partial) |
-| CRIT-002 | `flag` | `reject` | +0.400 (partial) |
-| CRIT-003 | `flag` | `escalate` | +0.800 (partial) |
-| CRIT-004 | `flag` | `reject` | −0.500 ✗ |
+| MED-005 | `flag` | `hold` | +0.660 (partial + investigation bonus) |
+| MED-006 | `flag` | `escalate` | +0.600 (partial + investigation bonus) |
+| HARD-001 | `flag` | `escalate` | +1.275 (partial + investigation bonus) |
+| HARD-002 | `flag` | `reject` | +0.525 (partial + investigation bonus) |
+| HARD-003 | `flag` | `reject` | +0.675 (partial + investigation bonus) |
+| HARD-004 | `flag` | `approve` | +0.825 (partial + investigation bonus) |
+| HARD-005 | `flag` | `escalate` | +0.825 (partial + investigation bonus) |
+| HARD-006 | `flag` | `flag` | +2.025 ✓ (+ investigation bonus) |
+| CRIT-001 | `flag` | `approve` | +1.100 (partial + investigation bonus) |
+| CRIT-002 | `flag` | `reject` | +0.900 (partial + investigation bonus) |
+| CRIT-003 | `flag` | `escalate` | +1.300 (partial + investigation bonus) |
+| CRIT-004 | `flag` | `reject` | −0.250 ✗ |
 
-**Observations:** The model defaulted to `flag` for 17/20 tasks — a safe but imprecise strategy. It earned full credit on the 6 tasks where `flag` was the correct answer and partial credit elsewhere. It did not use any investigation sub-actions (inspect/verify_kyc/etc.), which would improve scores on tasks that reward prior reasoning.
+**Observations:** The model used investigation sub-actions (`inspect`, `verify_kyc`, `contact_sender`) before terminal decisions, earning investigation bonuses that raised the score from a naive always-flag baseline. Easy cases with clear evidence now penalise lazy `flag` decisions (e.g. EASY-002). Agents that correctly identify terminal actions on top of proper investigation can exceed 0.90.
 
 To reproduce exactly (seed=42 is the default):
 

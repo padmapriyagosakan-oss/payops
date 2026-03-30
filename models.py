@@ -161,8 +161,8 @@ class PayOpsObservation(BaseModel):
         description="Operational cost penalty incurred by the last action",
     )
     budget_remaining: float = Field(
-        default=1.0,
-        description="Fraction of investigation budget remaining (1.0=full, 0.0=exhausted)",
+        default=5.0,
+        description="Remaining investigation budget (starts at 5.0; each investigation action deducts its cost)",
     )
 
     # --- context from prior investigation actions ---
@@ -181,6 +181,16 @@ class PayOpsObservation(BaseModel):
     contact_notes: Optional[str] = Field(
         default=None,
         description="Outcome of contacting the sender via 'contact_sender' action",
+    )
+
+    # --- recommended investigation sub-actions for this task ---
+    investigation_hints: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Sub-actions recommended for this task (non-exhaustive). "
+            "Using them before the terminal decision earns bonus reward and may reveal "
+            "decisive evidence. Empty list = no specific investigation required."
+        ),
     )
 
     # --- recent decision context (last 3 decisions in this episode) ---

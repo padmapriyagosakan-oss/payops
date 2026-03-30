@@ -132,7 +132,7 @@ EASY_TASKS: List[PayOpsTask] = [
         country_risk="low", kyc_status="verified", kyc_expiry_days=320,
         previous_violations=0, previous_sars=0, counterparty_risk="clean",
         correct_action="approve",
-        partial_credit_actions={"flag": 0.3},
+        partial_credit_actions={},  # no partial credit — clear approve, wrong actions penalised
         inspect_reveal="Sender account 3 yrs old. Consistent transaction history. KYC fully verified.",
         key_flags=[],
     ),
@@ -155,7 +155,7 @@ EASY_TASKS: List[PayOpsTask] = [
         country_risk="sanctioned", kyc_status="none", kyc_expiry_days=None,
         previous_violations=3, previous_sars=1, counterparty_risk="blacklist",
         correct_action="reject",
-        partial_credit_actions={"escalate": 0.4, "flag": 0.2},
+        partial_credit_actions={"escalate": 0.4},  # flag removed — textbook fraud needs decisive action
         inspect_reveal="Receiver linked to 3 prior rejected transactions. IP on threat-intel blocklist.",
         key_flags=["sanctioned_country", "unknown_sender"],
         network_graph={"sender": "unknown_user_x99", "offshore": "offshore_acct_442"},
@@ -179,7 +179,7 @@ EASY_TASKS: List[PayOpsTask] = [
         country_risk="low", kyc_status="verified", kyc_expiry_days=180,
         previous_violations=0, previous_sars=0, counterparty_risk="clean",
         correct_action="approve",
-        partial_credit_actions={"flag": 0.3},
+        partial_credit_actions={},  # no partial credit — tiny refund, no flags, flagging is wrong
         inspect_reveal="Standard return via web checkout. Matching order ID on file. No anomalies.",
         key_flags=[],
     ),

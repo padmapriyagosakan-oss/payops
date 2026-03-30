@@ -7,15 +7,21 @@ The grader rewards *correct intermediate reasoning* as well as the final
 call, so agents receive a dense learning signal across the full trajectory.
 
 Terminal action credit is now split:
-  Correct final action           → +0.60  (base)
-  Partial-credit adjacent action → fraction × 0.60
+  Correct final action           → +1.00
+  Partial-credit adjacent action → fraction × 1.00
   approve when should be reject/escalate → −1.00  (worst mistake)
   approve when should be flag/hold       → −0.50
   reject  when should be approve         → −0.50
   any other wrong terminal action        → −0.25
 
+Skip-investigation penalty (hard / critical tasks only):
+  Agent issued zero investigation sub-actions on a task that has
+  requires_investigation AND got the terminal action wrong →
+  partial credit is multiplied by 0.50.  Correct terminal actions
+  are NEVER penalised by this rule.
+
 Investigation sub-action bonuses (per eligible, first use only):
-  Used one of task.requires_investigation  → +0.20
+  Used one of task.requires_investigation  → +0.15
   Flag identification: agent used inspect AND task.key_flags ⊆ obs.flags → +0.20
   (Both bonuses are independent and stackable.)
 
@@ -61,6 +67,9 @@ CONFIDENCE_CORRECT_BONUS = 0.10
 CONFIDENCE_WRONG_PENALTY = -0.10
 REGULATORY_BONUS         = 0.20
 BUDGET_OVERSPEND_PENALTY = 0.10
+# Skip-investigation penalty: wrong terminal on hard/critical with no investigation
+# cuts partial credit in half.  Correct terminal actions are NEVER penalised.
+SKIP_INVESTIGATION_MULTIPLIER = 0.50
 
 DIFFICULTY_WEIGHT: Dict[str, float] = {
     "easy":     1.0,
@@ -153,6 +162,20 @@ def _grade_single_task(
     weight  = DIFFICULTY_WEIGHT.get(task.difficulty, 1.0)
     base    = _base_terminal_reward(terminal_action, task)
     correct = terminal_action == task.correct_action
+
+    # ── skip-investigation penalty ───────────────────────────────────────────
+    # If the agent issued NO investigation sub-actions on a hard/critical task
+    # that explicitly requires them, AND the terminal action is wrong, halve the
+    # partial credit.  Correct terminal actions are never penalised (preserves
+    # test I-01 where all-correct + no-investigation still scores 1.0).
+    requires_inv = getattr(task, "requires_investigation", set())
+    if (
+        not correct
+        and requires_inv
+        and not investigation_actions
+        and task.difficulty in ("hard", "critical")
+    ):
+        base = base * SKIP_INVESTIGATION_MULTIPLIER
 
     # ── investigation trajectory bonus & time penalty ────────────────────────
     inv_bonus  = 0.0

@@ -141,7 +141,7 @@ def build_observation_text(obs: dict) -> str:
     """Format the observation dict into a readable prompt for the LLM."""
     lines = [
         f"Transaction ID : {obs.get('transaction_id', 'N/A')}",
-        f"Task           : {obs.get('task_id', 'N/A')} ({obs.get('difficulty', 'N/A')} difficulty)",
+        f"Task           : {obs.get('task_id', 'N/A')} ({obs.get('task_difficulty', 'N/A')} difficulty)",
         f"Amount         : {obs.get('currency', 'USD')} {obs.get('amount', 0):,.2f}",
         f"Sender         : {obs.get('sender', 'N/A')}",
         f"Receiver       : {obs.get('receiver', 'N/A')}",
@@ -157,6 +157,10 @@ def build_observation_text(obs: dict) -> str:
         f"Budget Remaining: {obs.get('budget_remaining', 5.0):.2f}",
         f"Step           : {obs.get('chain_step', 1)}/{obs.get('chain_total', 1)}",
     ]
+    # Show investigation hints prominently when present
+    hints = obs.get('investigation_hints', [])
+    if hints:
+        lines.append(f"INVESTIGATION RECOMMENDED: {', '.join(hints)} (use these before deciding for bonus reward + better evidence)")
     # Append revealed intel if present
     for field, label in [
         ("inspection_notes", "Inspection Notes"),
