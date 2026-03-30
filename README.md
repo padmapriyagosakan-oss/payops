@@ -1,3 +1,19 @@
+---
+title: PayOps — Payment Operations Incident Response
+emoji: 💳
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+tags:
+  - openenv
+  - finance
+  - fraud-detection
+  - compliance
+  - reinforcement-learning
+pinned: false
+---
+
 # PayOps — Payment Operations Incident Response
 
 An **OpenEnv-compatible** reinforcement-learning environment where an AI agent
