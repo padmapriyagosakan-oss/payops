@@ -260,19 +260,57 @@ print(f"Episode score: {score['normalised_score']:.4f}")
 
 ## Baseline Results
 
-The rule-based baseline agent uses a deterministic priority-ordered policy.
+### Rule-based baseline (`POST /baseline`)
 
-| Metric | Baseline (v2, 20 tasks) |
-|--------|-------------------------|
+The rule-based baseline uses a deterministic priority-ordered policy in `scripts_util.py`.
+
+| Metric | Rule-based baseline (v2, 20 tasks) |
+|--------|------------------------------------|
 | Normalised score | 0.68–0.76 |
 | Passed (≥ 0.5) | Yes |
 | Strong at | Easy tasks, clear velocity/flag patterns |
 | Weak at | Hard adversarial tasks (HARD-001 model-poisoning, HARD-004 FX settlement) |
 | Critical coverage | Partial — misses some SAR filing requirements |
 
-Scores vary slightly per run due to per-episode parameter jitter (see below).
+Scores vary slightly per run due to per-episode parameter jitter.
 
 Run `POST /baseline` to reproduce.
+
+### LLM baseline (`inference.py` — `Qwen/Qwen2.5-7B-Instruct` via HF Inference)
+
+Run on 30 March 2026 against the live HF Space (`https://padmapriyagosakan-payops-env.hf.space`).
+
+| Metric | Qwen/Qwen2.5-7B-Instruct |
+|--------|--------------------------|
+| Normalised score | 0.3612 |
+| Total reward | 10.185 / 28.200 max |
+| Budget spent | 3.10 / 5.00 |
+| Budget penalty | 0.00 |
+| Passed (≥ 0.5) | No |
+| LLM calls completed | ~10 of 20 tasks (HF free-tier credits exhausted mid-run; remainder used `flag` fallback) |
+
+**Per-task LLM decisions (first ~10 tasks, before credits exhausted):**
+
+| Task | LLM Action | Correct | Result |
+|------|-----------|---------|--------|
+| EASY-001 | inspect → approve | approve | ✓ correct (+investigation bonus) |
+| EASY-002 | escalate | reject | partial credit |
+| EASY-003 | inspect → approve | approve | ✓ correct (+investigation bonus) |
+| EASY-004 | reject | flag | ✗ wrong (−0.25) |
+| MED-001 | inspect → approve | escalate | ✗ wrong approve (−1.0) |
+| MED-002 | inspect → hold | hold | ✓ correct (+investigation bonus) |
+| MED-003 | flag | flag | ✓ correct |
+| MED-004 | flag | flag | ✓ correct |
+
+To reproduce with your own API key:
+
+```bash
+export HF_TOKEN="hf_..."                  # or OPENAI_API_KEY for OpenAI
+export API_BASE_URL="https://router.huggingface.co/v1"
+export MODEL_NAME="Qwen/Qwen2.5-7B-Instruct"
+export PAYOPS_BASE_URL="https://padmapriyagosakan-payops-env.hf.space"
+python inference.py
+```
 
 ---
 

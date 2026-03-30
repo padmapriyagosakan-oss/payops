@@ -27,11 +27,20 @@ from __future__ import annotations
 
 import json
 import os
+import ssl
 import sys
 import time
 import urllib.request
 import urllib.error
 from typing import Optional
+
+# SSL context: HF Spaces use Let's Encrypt certs that Python 3.14 on macOS
+# cannot verify because the system trust store is not used by default.
+# We disable verification only for requests to the PayOps server itself;
+# the OpenAI client has its own SSL handling.
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode = ssl.CERT_NONE
 
 # ── OpenAI client (uses env vars) ─────────────────────────────────────────
 
@@ -98,7 +107,7 @@ def _make_request(url: str, method: str = "GET", body: Optional[dict] = None) ->
     headers = {"Content-Type": "application/json"}
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30, context=_SSL_CTX) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         err_body = e.read().decode()
@@ -218,7 +227,11 @@ def run_inference() -> dict:
 
     step_count = 0
     start_time = time.time()
-    MAX_STEPS = 200  # safety limit
+    MAX_STEPS = 200       # safety limit
+    MAX_INV_PER_TASK = 3  # max investigation actions per task before forcing terminal
+
+    # Per-task investigation counter: task_id → count
+    inv_counts: dict = {}
 
     # ── main loop ────────────────────────────────────────────────────────
     while not obs.get("done", False) and step_count < MAX_STEPS:
@@ -243,6 +256,18 @@ def run_inference() -> dict:
         if action in expensive and budget < expensive[action] + 0.1:
             print(f"  ⚠ Insufficient budget ({budget:.2f}) for '{action}' → using 'inspect'")
             action = "inspect" if budget >= 0.1 else "flag"
+
+        # Loop guard: if model keeps investigating without deciding, force a terminal action
+        INVESTIGATION_ACTIONS = {"inspect", "request_docs", "verify_kyc", "contact_sender", "file_sar"}
+        TERMINAL_ACTIONS = {"approve", "reject", "flag", "escalate", "hold"}
+        if action in INVESTIGATION_ACTIONS:
+            inv_counts[task_id] = inv_counts.get(task_id, 0) + 1
+            if inv_counts[task_id] > MAX_INV_PER_TASK:
+                print(f"  ⚠ Investigation loop on {task_id} ({inv_counts[task_id]} sub-actions) → forcing 'flag'")
+                action = "flag"
+        else:
+            # Reset counter on terminal action (task will advance)
+            inv_counts[task_id] = 0
 
         # Step
         try:
