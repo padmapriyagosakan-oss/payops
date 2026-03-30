@@ -319,7 +319,7 @@ def run_inference() -> dict:
     print(f"  {'-'*50}")
     for t in grader.get("per_task", []):
         print(f"  {t.get('task_id','?'):12s} {t.get('difficulty','?'):10s} "
-              f"{t.get('terminal_action','?'):15s} {t.get('reward', 0):+8.3f}")
+              f"{t.get('terminal_action','?'):15s} {t.get('weighted_reward', 0):+8.3f}")
 
     return grader
 

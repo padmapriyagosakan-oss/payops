@@ -276,40 +276,126 @@ Scores vary slightly per run due to per-episode parameter jitter.
 
 Run `POST /baseline` to reproduce.
 
-### LLM baseline (`inference.py` — `Qwen/Qwen2.5-7B-Instruct` via HF Inference)
+### LLM baseline (`inference.py` — `llama-3.1-8b-instant` via Groq)
 
 Run on 30 March 2026 against the live HF Space (`https://padmapriyagosakan-payops-env.hf.space`).
 
-| Metric | Qwen/Qwen2.5-7B-Instruct |
-|--------|--------------------------|
-| Normalised score | 0.3612 |
-| Total reward | 10.185 / 28.200 max |
-| Budget spent | 3.10 / 5.00 |
+| Metric | llama-3.1-8b-instant (Groq) |
+|--------|-----------------------------|
+| Normalised score | **0.5039** |
+| Total reward | 14.210 / 28.200 max |
+| Budget spent | 0.00 / 5.00 |
 | Budget penalty | 0.00 |
-| Passed (≥ 0.5) | No |
-| LLM calls completed | ~10 of 20 tasks (HF free-tier credits exhausted mid-run; remainder used `flag` fallback) |
+| Episode steps | 20 (all tasks completed) |
+| Duration | 61.1 s |
+| Passed (≥ 0.5) | **YES ✓** |
 
-**Per-task LLM decisions (first ~10 tasks, before credits exhausted):**
+**Per-task decisions:**
 
-| Task | LLM Action | Correct | Result |
-|------|-----------|---------|--------|
-| EASY-001 | inspect → approve | approve | ✓ correct (+investigation bonus) |
-| EASY-002 | escalate | reject | partial credit |
-| EASY-003 | inspect → approve | approve | ✓ correct (+investigation bonus) |
-| EASY-004 | reject | flag | ✗ wrong (−0.25) |
-| MED-001 | inspect → approve | escalate | ✗ wrong approve (−1.0) |
-| MED-002 | inspect → hold | hold | ✓ correct (+investigation bonus) |
-| MED-003 | flag | flag | ✓ correct |
-| MED-004 | flag | flag | ✓ correct |
+| Task | LLM Action | Correct Action | Step Reward |
+|------|-----------|----------------|------------|
+| EASY-001 | `approve` | `approve` | +1.000 ✓ |
+| EASY-002 | `reject` | `reject` | +1.000 ✓ |
+| EASY-003 | `approve` | `approve` | +1.000 ✓ |
+| EASY-004 | `flag` | `flag` | +1.000 ✓ |
+| MED-001 | `flag` | `escalate` | +0.500 (partial) |
+| MED-002 | `flag` | `hold` | +0.400 (partial) |
+| MED-003 | `flag` | `flag` | +1.000 ✓ |
+| MED-004 | `flag` | `flag` | +1.000 ✓ |
+| MED-005 | `flag` | `hold` | +0.500 (partial) |
+| MED-006 | `flag` | `escalate` | +0.400 (partial) |
+| HARD-001 | `flag` | `escalate` | +0.600 (partial) |
+| HARD-002 | `flag` | `reject` | +0.300 (partial) |
+| HARD-003 | `flag` | `reject` | +0.200 (partial) |
+| HARD-004 | `flag` | `approve` | +0.300 (partial) |
+| HARD-005 | `flag` | `escalate` | +0.500 (partial) |
+| HARD-006 | `flag` | `flag` | +1.000 ✓ |
+| CRIT-001 | `flag` | `approve` | +0.300 (partial) |
+| CRIT-002 | `flag` | `reject` | +0.200 (partial) |
+| CRIT-003 | `flag` | `escalate` | +0.400 (partial) |
+| CRIT-004 | `flag` | `reject` | −0.250 ✗ |
 
-To reproduce with your own API key:
+**Observations:** The model correctly handled all 4 easy tasks, scored partial credit on medium/hard/critical tasks by defaulting to `flag` (a safe conservative choice), and passed the episode threshold. It did not use any investigation sub-actions in this run — using `inspect`/`verify_kyc` before deciding would improve the score on tasks that reward investigation.
+
+To reproduce:
 
 ```bash
-export HF_TOKEN="hf_..."                  # or OPENAI_API_KEY for OpenAI
-export API_BASE_URL="https://router.huggingface.co/v1"
-export MODEL_NAME="Qwen/Qwen2.5-7B-Instruct"
+export OPENAI_API_KEY="gsk_..."           # your Groq API key
+export API_BASE_URL="https://api.groq.com/openai/v1"
+export MODEL_NAME="llama-3.1-8b-instant"
 export PAYOPS_BASE_URL="https://padmapriyagosakan-payops-env.hf.space"
-python inference.py
+PYTHONPATH=$(pwd) python payops_env/inference.py
+```
+
+For Groq setup instructions see the **Running inference with Groq** section below.
+
+---
+
+## Running inference with Groq (recommended — free)
+
+[Groq](https://console.groq.com) provides a completely free API with no monthly credit cap and no installation required. It uses the same OpenAI-compatible interface that `inference.py` already targets.
+
+### Prerequisites
+
+1. **Create a free Groq account** — go to [console.groq.com](https://console.groq.com) and sign up (Google / GitHub login available)
+
+2. **Generate an API key** — click **API Keys → Create API Key**, copy the key (starts with `gsk_`)
+
+3. **Install the Python dependency** (already in `requirements.txt`):
+   ```bash
+   pip install openai
+   ```
+
+### Run inference
+
+```bash
+cd /path/to/payops_env      # project root (parent of payops_env/)
+
+export OPENAI_API_KEY="gsk_..."          # your Groq API key
+export API_BASE_URL="https://api.groq.com/openai/v1"
+export MODEL_NAME="llama-3.1-8b-instant"
+export PAYOPS_BASE_URL="https://padmapriyagosakan-payops-env.hf.space"
+
+PYTHONPATH=$(pwd) python payops_env/inference.py
+```
+
+> **Why Groq?**
+> - Free tier: 14,400 requests/day, 500,000 tokens/minute — a 20-task episode uses ~30 calls
+> - No monthly credit pool that runs out mid-run (unlike the HF free tier)
+> - No installation or model download (unlike Ollama)
+> - `temperature=0.0` is already set in `inference.py` so results are reproducible
+> - Inference speed: ~750 tok/s → full episode completes in under 30 seconds
+
+### Alternative free models on Groq
+
+| Model | Notes |
+|-------|-------|
+| `llama-3.1-8b-instant` | Fastest, good reasoning |
+| `llama-3.3-70b-versatile` | Best quality on hard tasks; same free tier |
+| `mixtral-8x7b-32768` | Large context window |
+| `gemma2-9b-it` | Google Gemma 2 |
+
+### Alternative: Ollama (fully local, no internet required for LLM calls)
+
+If you prefer to run the model entirely on your machine:
+
+```bash
+# 1. Install
+brew install ollama
+
+# 2. Pull a model (choose based on available RAM)
+ollama pull qwen2.5:3b      # ~2 GB  –  8 GB RAM
+ollama pull qwen2.5:7b      # ~4.7 GB – 16 GB RAM
+
+# 3. Start the server (keep running in a separate terminal)
+ollama serve
+
+# 4. Run inference
+export OPENAI_API_KEY=ollama
+export API_BASE_URL="http://localhost:11434/v1"
+export MODEL_NAME="qwen2.5:3b"
+export PAYOPS_BASE_URL="https://padmapriyagosakan-payops-env.hf.space"
+PYTHONPATH=$(pwd) python payops_env/inference.py
 ```
 
 ---
