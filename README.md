@@ -278,52 +278,55 @@ Run `POST /baseline` to reproduce.
 
 ### LLM baseline (`inference.py` — `llama-3.1-8b-instant` via Groq)
 
-Run on 30 March 2026 against the live HF Space (`https://padmapriyagosakan-payops-env.hf.space`).
+Run on 30 March 2026 against the live HF Space (`https://padmapriyagosakan-payops-env.hf.space`), seed 42 (reproducible).
 
 | Metric | llama-3.1-8b-instant (Groq) |
 |--------|-----------------------------|
-| Normalised score | **0.5039** |
-| Total reward | 14.210 / 28.200 max |
+| Normalised score | **0.4755** |
+| Total reward | 13.410 / 28.200 max |
+| Tasks correct | 6 / 20 (30%) |
 | Budget spent | 0.00 / 5.00 |
 | Budget penalty | 0.00 |
 | Episode steps | 20 (all tasks completed) |
-| Duration | 61.1 s |
-| Passed (≥ 0.5) | **YES ✓** |
+| Duration | ~62 s |
+| Passed (≥ 0.5) | **NO ✗** |
+| Seed | 42 (fixed — deterministic across re-runs) |
 
 **Per-task decisions:**
 
-| Task | LLM Action | Correct Action | Step Reward |
-|------|-----------|----------------|------------|
+| Task | LLM Action | Correct Action | Weighted Reward |
+|------|-----------|----------------|----------------|
 | EASY-001 | `approve` | `approve` | +1.000 ✓ |
-| EASY-002 | `reject` | `reject` | +1.000 ✓ |
+| EASY-002 | `flag` | `reject` | +0.200 (partial) |
 | EASY-003 | `approve` | `approve` | +1.000 ✓ |
 | EASY-004 | `flag` | `flag` | +1.000 ✓ |
-| MED-001 | `flag` | `escalate` | +0.500 (partial) |
-| MED-002 | `flag` | `hold` | +0.400 (partial) |
-| MED-003 | `flag` | `flag` | +1.000 ✓ |
-| MED-004 | `flag` | `flag` | +1.000 ✓ |
-| MED-005 | `flag` | `hold` | +0.500 (partial) |
-| MED-006 | `flag` | `escalate` | +0.400 (partial) |
-| HARD-001 | `flag` | `escalate` | +0.600 (partial) |
-| HARD-002 | `flag` | `reject` | +0.300 (partial) |
-| HARD-003 | `flag` | `reject` | +0.200 (partial) |
-| HARD-004 | `flag` | `approve` | +0.300 (partial) |
-| HARD-005 | `flag` | `escalate` | +0.500 (partial) |
-| HARD-006 | `flag` | `flag` | +1.000 ✓ |
-| CRIT-001 | `flag` | `approve` | +0.300 (partial) |
-| CRIT-002 | `flag` | `reject` | +0.200 (partial) |
-| CRIT-003 | `flag` | `escalate` | +0.400 (partial) |
-| CRIT-004 | `flag` | `reject` | −0.250 ✗ |
+| MED-001 | `flag` | `escalate` | +0.600 (partial) |
+| MED-002 | `flag` | `hold` | +0.480 (partial) |
+| MED-003 | `flag` | `flag` | +1.200 ✓ |
+| MED-004 | `flag` | `flag` | +1.200 ✓ |
+| MED-005 | `flag` | `hold` | +0.600 (partial) |
+| MED-006 | `flag` | `escalate` | +0.480 (partial) |
+| HARD-001 | `flag` | `escalate` | +0.900 (partial) |
+| HARD-002 | `flag` | `reject` | +0.450 (partial) |
+| HARD-003 | `flag` | `reject` | +0.300 (partial) |
+| HARD-004 | `flag` | `approve` | +0.450 (partial) |
+| HARD-005 | `flag` | `escalate` | +0.750 (partial) |
+| HARD-006 | `flag` | `flag` | +1.500 ✓ |
+| CRIT-001 | `flag` | `approve` | +0.600 (partial) |
+| CRIT-002 | `flag` | `reject` | +0.400 (partial) |
+| CRIT-003 | `flag` | `escalate` | +0.800 (partial) |
+| CRIT-004 | `flag` | `reject` | −0.500 ✗ |
 
-**Observations:** The model correctly handled all 4 easy tasks, scored partial credit on medium/hard/critical tasks by defaulting to `flag` (a safe conservative choice), and passed the episode threshold. It did not use any investigation sub-actions in this run — using `inspect`/`verify_kyc` before deciding would improve the score on tasks that reward investigation.
+**Observations:** The model defaulted to `flag` for 17/20 tasks — a safe but imprecise strategy. It earned full credit on the 6 tasks where `flag` was the correct answer and partial credit elsewhere. It did not use any investigation sub-actions (inspect/verify_kyc/etc.), which would improve scores on tasks that reward prior reasoning.
 
-To reproduce:
+To reproduce exactly (seed=42 is the default):
 
 ```bash
 export OPENAI_API_KEY="gsk_..."           # your Groq API key
 export API_BASE_URL="https://api.groq.com/openai/v1"
 export MODEL_NAME="llama-3.1-8b-instant"
 export PAYOPS_BASE_URL="https://padmapriyagosakan-payops-env.hf.space"
+# INFERENCE_SEED=42  # default; set to "random" for a fresh episode
 PYTHONPATH=$(pwd) python payops_env/inference.py
 ```
 

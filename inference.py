@@ -60,6 +60,10 @@ OPENAI_API_KEY: str  = os.environ.get("OPENAI_API_KEY", "")
 HF_TOKEN: str        = os.environ.get("HF_TOKEN", "")
 _API_KEY: str        = OPENAI_API_KEY or HF_TOKEN   # resolved credential
 PAYOPS_URL: str      = os.environ.get("PAYOPS_BASE_URL", "http://localhost:7860").rstrip("/")
+# Fixed seed keeps per-episode amount/risk jitter deterministic across runs.
+# Override with INFERENCE_SEED=<int> or INFERENCE_SEED=random for a fresh episode.
+_SEED_ENV             = os.environ.get("INFERENCE_SEED", "42")
+INFERENCE_SEED: Optional[int] = None if _SEED_ENV.lower() == "random" else int(_SEED_ENV)
 
 VALID_ACTIONS = {
     "approve", "reject", "flag", "escalate", "hold",
@@ -219,7 +223,12 @@ def run_inference() -> dict:
         sys.exit(1)
 
     # ── reset environment ────────────────────────────────────────────────
-    _reset_resp = _make_request(f"{PAYOPS_URL}/reset", method="POST")
+    # Pass a fixed seed so per-episode jitter is deterministic (reproducible scores).
+    reset_body: dict = {}
+    if INFERENCE_SEED is not None:
+        reset_body["seed"] = INFERENCE_SEED
+        print(f"Episode seed  : {INFERENCE_SEED} (set INFERENCE_SEED=random for a fresh run)")
+    _reset_resp = _make_request(f"{PAYOPS_URL}/reset", method="POST", body=reset_body or None)
     # Support official wrapped format {"observation":{...},"reward":...} and legacy flat format
     obs = _unwrap_response(_reset_resp)
     print(f"Episode start : task={obs['task_id']}, budget={obs['budget_remaining']}")
@@ -314,12 +323,23 @@ def run_inference() -> dict:
     print(f"{'='*50}")
 
     # Per-task breakdown
+    per_task = grader.get("per_task", [])
+    correct_count = sum(1 for t in per_task if t.get("correct", False))
+    wrong_count   = len(per_task) - correct_count
+
     print("\nPer-task breakdown:")
-    print(f"  {'Task':12s} {'Difficulty':10s} {'Action':15s} {'Reward':>8s}")
-    print(f"  {'-'*50}")
-    for t in grader.get("per_task", []):
-        print(f"  {t.get('task_id','?'):12s} {t.get('difficulty','?'):10s} "
-              f"{t.get('terminal_action','?'):15s} {t.get('weighted_reward', 0):+8.3f}")
+    print(f"  {'Task':12s} {'Difficulty':10s} {'Agent Action':15s} {'Correct Action':15s} {'Reward':>8s}")
+    print(f"  {'-'*65}")
+    for t in per_task:
+        ok  = t.get("correct", False)
+        sym = "✓" if ok else "✗"
+        print(f"  [{sym}] {t.get('task_id','?'):12s} {t.get('difficulty','?'):10s} "
+              f"{t.get('terminal_action','?'):15s} {t.get('correct_action','?'):15s} "
+              f"{t.get('weighted_reward', 0):+8.3f}")
+
+    print(f"\n  Tasks correct : {correct_count}/{len(per_task)}  "
+          f"({100*correct_count/len(per_task):.0f}%)  "
+          f"Wrong: {wrong_count}")
 
     return grader
 
