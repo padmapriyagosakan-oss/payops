@@ -346,7 +346,7 @@ check "J-01  POST /baseline → normalised_score present" "$BASELINE" '"normalis
 check "J-02  POST /baseline → total_reward present" "$BASELINE" '"total_reward":'
 check "J-03  POST /baseline → steps > 0" "$BASELINE" '"steps":[1-9]'
 check "J-04  POST /baseline → per_task scores present" "$BASELINE" '"scores":\['
-check "J-05  POST /baseline → score >= 0.5 (passes)" "$BASELINE" '"normalised_score":0\.[5-9]'
+check "J-05  POST /baseline → score >= 0.5 (passes)" "$BASELINE" '"normalised_score":(1\.0|0\.[5-9])'
 
 # ═══════════════════════════════════════════════════════════
 # GROUP K — /analytics endpoint
@@ -356,15 +356,18 @@ section "GROUP K — Analytics endpoint"
 # Run a full episode first so analytics has data
 reset
 BASE=$BASE python3 - <<'PYEOF'
-import os, urllib.request, json, sys
+import os, ssl, urllib.request, json, sys
 BASE = os.environ.get("BASE", "http://localhost:8000")
+_ssl = ssl.create_default_context()
+_ssl.check_hostname = False
+_ssl.verify_mode = ssl.CERT_NONE
 def post(path, body=None):
     req = urllib.request.Request(f"{BASE}{path}",
         data=json.dumps(body).encode() if body else None,
         headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req) as r: return json.loads(r.read())
+    with urllib.request.urlopen(req, context=_ssl) as r: return json.loads(r.read())
 def get(path):
-    with urllib.request.urlopen(f"{BASE}{path}") as r: return json.loads(r.read())
+    with urllib.request.urlopen(f"{BASE}{path}", context=_ssl) as r: return json.loads(r.read())
 
 post("/reset")
 actions = [
@@ -409,13 +412,16 @@ section "GROUP M — Perfect episode (all 20 correct, no investigation cost)"
 
 reset
 BASE=$BASE python3 - <<'PYEOF'
-import os, urllib.request, json
+import os, ssl, urllib.request, json
 BASE = os.environ.get("BASE", "http://localhost:8000")
+_ssl = ssl.create_default_context()
+_ssl.check_hostname = False
+_ssl.verify_mode = ssl.CERT_NONE
 def post(path, body=None):
     req = urllib.request.Request(f"{BASE}{path}",
         data=json.dumps(body).encode() if body else None,
         headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req) as r: return json.loads(r.read())
+    with urllib.request.urlopen(req, context=_ssl) as r: return json.loads(r.read())
 
 post("/reset")
 actions = [
@@ -548,13 +554,16 @@ section "GROUP Q — WebSocket (requires wscat or python)"
 
 if command -v python3 &>/dev/null; then
   WS_RESULT=$(BASE=$BASE python3 - <<'PYEOF'
-import os, urllib.request, json
+import os, ssl, urllib.request, json
 try:
     BASE = os.environ.get("BASE", "http://localhost:8000")
+    _ssl = ssl.create_default_context()
+    _ssl.check_hostname = False
+    _ssl.verify_mode = ssl.CERT_NONE
     # ws upgrade check via HTTP (will get 426 Upgrade Required — proves endpoint exists)
     req = urllib.request.Request(f"{BASE}/ws")
     try:
-        urllib.request.urlopen(req)
+        urllib.request.urlopen(req, context=_ssl)
     except Exception as e:
         msg = str(e)
         if "426" in msg or "101" in msg or "Switching" in msg or "upgrade" in msg.lower():
