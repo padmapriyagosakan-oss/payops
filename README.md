@@ -45,42 +45,68 @@ the episode is complete.
 
 ## Action Space
 
-| Action       | Description |
-|-------------|-------------|
-| `approve`   | Mark transaction as legitimate; allow it through |
-| `reject`    | Block the transaction outright |
-| `flag`      | Soft hold; mark for manual review |
-| `escalate`  | Route to senior compliance officer / fraud team |
-| `inspect`   | Request additional signals (logs, KYC, velocity) — yields reveal notes and a small reward; agent then acts again on the same transaction |
-| `hold`      | Temporary hold pending more information |
+Terminal decisions (no budget cost) commit to a final outcome for the transaction.
+Investigation sub-actions (with budget cost) reveal more information and let the agent act again on the same transaction.
+
+| Action           | Type          | Description | Budget Cost |
+|-----------------|---------------|-------------|-------------|
+| `approve`        | terminal      | Mark transaction as legitimate; allow it through | — |
+| `reject`         | terminal      | Block the transaction outright | — |
+| `flag`           | terminal      | Soft hold; mark for manual review | — |
+| `escalate`       | terminal      | Route to senior compliance officer / fraud team | — |
+| `hold`           | terminal      | Temporary hold pending more information | — |
+| `inspect`        | investigation | Pull additional signals (logs, KYC, velocity) — yields `inspection_notes` | 0.10 |
+| `request_docs`   | investigation | Ask sender for supporting documents (invoice, contract) — yields `docs_notes` | 0.20 |
+| `verify_kyc`     | investigation | Trigger an active KYC re-verification check — yields `kyc_notes` | 0.20 |
+| `contact_sender` | investigation | Contact the sender directly to confirm intent — yields `contact_notes` | 0.30 |
+| `file_sar`       | investigation | File a Suspicious Activity Report to the regulator (required on AML/structuring tasks) | 0.10 |
 
 ---
 
 ## Observation Space
 
-| Field                 | Type           | Description |
-|----------------------|----------------|-------------|
-| `transaction_id`     | `str`          | Unique transaction identifier |
-| `amount`             | `float`        | Transaction amount |
-| `currency`           | `str`          | ISO-4217 currency code |
-| `sender`             | `str`          | Sender identifier |
-| `receiver`           | `str`          | Receiver identifier |
-| `transaction_type`   | `str`          | transfer \| payment \| withdrawal \| refund \| internal |
-| `status`             | `str`          | pending \| approved \| rejected \| flagged \| escalated \| held \| inspected |
-| `risk_score`         | `float [0,1]`  | Composite ML risk score |
-| `flags`              | `List[str]`    | Active risk flags |
-| `velocity_1h`        | `int?`         | Transactions from sender in the past hour |
-| `country_risk`       | `str?`         | low \| medium \| high \| sanctioned |
-| `kyc_status`         | `str?`         | verified \| pending \| failed \| none |
-| `previous_violations`| `int?`         | Prior compliance violations |
-| `inspection_notes`   | `str?`         | Extra details revealed after an `inspect` action |
-| `task_id`            | `str`          | Identifier of the active task |
-| `task_difficulty`    | `str`          | easy \| medium \| hard |
-| `step_in_episode`    | `int`          | Steps elapsed in this episode |
-| `reward`             | `float`        | Reward from the last action |
-| `cumulative_reward`  | `float`        | Total reward so far this episode |
-| `done`               | `bool`         | Whether the episode has ended |
-| `info`               | `dict`         | Diagnostic info (event, correct action, etc.) |
+| Field                   | Type              | Description |
+|------------------------|-------------------|-------------|
+| `transaction_id`        | `str`             | Unique transaction identifier |
+| `amount`                | `float`           | Transaction amount in the stated currency |
+| `currency`              | `str`             | ISO-4217 currency code |
+| `sender`                | `str`             | Sender identifier (email / account / alias) |
+| `receiver`              | `str`             | Receiver identifier |
+| `transaction_type`      | `str`             | transfer \| payment \| withdrawal \| refund \| internal \| loan_repayment \| payroll |
+| `status`                | `str`             | pending \| approved \| rejected \| flagged \| escalated \| held \| inspected \| docs_requested \| kyc_triggered \| sender_contacted \| sar_filed |
+| `risk_score`            | `float [0,1]`     | Composite ML risk score |
+| `ml_confidence`         | `float [0,1]`     | Model's self-reported confidence in `risk_score` — low value signals possible model poisoning |
+| `flags`                 | `List[str]`       | Active risk flags (e.g. `high_value`, `unknown_sender`, `velocity_breach`) |
+| `velocity_1h`           | `int?`            | Transactions from sender in the past hour |
+| `velocity_24h`          | `int?`            | Transactions from sender in the past 24 hours |
+| `avg_transaction_amount`| `float?`          | Sender's historical average transaction amount |
+| `account_age_days`      | `int?`            | Age of the sender account in days |
+| `country_risk`          | `str?`            | low \| medium \| high \| sanctioned |
+| `kyc_status`            | `str?`            | verified \| pending \| failed \| none \| expired |
+| `kyc_expiry_days`       | `int?`            | Days until KYC expires (negative = already expired) |
+| `previous_violations`   | `int?`            | Prior compliance violations for this sender |
+| `previous_sars`         | `int?`            | Suspicious Activity Reports previously filed for this sender |
+| `counterparty_risk`     | `str?`            | clean \| unknown \| watchlist \| blacklist |
+| `chain_step`            | `int`             | Current step in a multi-hop investigation chain (1 = initial presentation) |
+| `chain_total`           | `int`             | Total investigation steps for this task (1 = single-step) |
+| `chain_context`         | `str?`            | Accumulated summary of findings from earlier chain steps |
+| `steps_remaining`       | `int?`            | Investigation sub-steps remaining before a terminal decision is required |
+| `action_cost`           | `float`           | Budget cost incurred by the last action |
+| `budget_remaining`      | `float [0,1]`     | Fraction of investigation budget remaining (1.0 = full, 0.0 = exhausted) |
+| `inspection_notes`      | `str?`            | Additional details revealed after an `inspect` action |
+| `docs_notes`            | `str?`            | Document review findings after a `request_docs` action |
+| `kyc_notes`             | `str?`            | KYC re-verification outcome after a `verify_kyc` action |
+| `contact_notes`         | `str?`            | Outcome after a `contact_sender` action |
+| `recent_decisions`      | `List[dict]`      | Last ≤3 completed decisions in this episode (for pattern context) |
+| `network_graph`         | `dict?`           | Mule-chain / correspondent-bank relationship graph where present |
+| `task_id`               | `str`             | Identifier of the active task |
+| `task_difficulty`       | `str`             | easy \| medium \| hard \| critical |
+| `step_in_episode`       | `int`             | Steps elapsed in this episode |
+| `reward`                | `float`           | Reward from the last action |
+| `reward_breakdown`      | `dict`            | Itemised reward components: base, confidence_bonus, cost_penalty, etc. |
+| `cumulative_reward`     | `float`           | Total reward accumulated so far in this episode |
+| `done`                  | `bool`            | Whether the episode has ended |
+| `info`                  | `dict`            | Diagnostic info (event, correct action, etc.) |
 
 ---
 
@@ -103,8 +129,8 @@ the episode is complete.
 | MED-002 | Internal treasury transfer; large amount, KYC pending renewal | `hold` |
 | MED-003 | Recurring subscription 3× higher than historical average | `flag` |
 | MED-004 | Payment to licensed crypto exchange from verified personal account | `flag` |
-| MED-005 | Payroll disbursement to 40 employees from new payroll account | `approve` |
-| MED-006 | Cross-border remittance to high-risk corridor; regular migrant-worker pattern | `hold` |
+| MED-005 | Expired KYC on high-frequency corporate payroll account; KYC lapsed 12 days ago | `hold` |
+| MED-006 | Real estate advance payment; large first-time transfer to new receiver but signed contract exists | `escalate` |
 
 ### Hard (6 tasks — adversarial / edge-case)
 
@@ -115,16 +141,16 @@ the episode is complete.
 | HARD-003 | Structuring / smurfing: just-below-CTR-threshold payments, same UBO | `reject` |
 | HARD-004 | Legitimate FX correspondent banking settlement — looks alarming, is not | `approve` |
 | HARD-005 | Insider threat: employee initiating transfers to personal family accounts | `escalate` |
-| HARD-006 | Zero-day mule account: new account receiving high-velocity micro-deposits | `reject` |
+| HARD-006 | Ghost account: dormant 5 years, suddenly received 20 inbound transfers this week — possible account takeover | `flag` |
 
 ### Critical (4 tasks — regulatory + multi-step investigation chains)
 
 | ID        | Description | Correct Action |
 |----------|-------------|----------------|
-| CRIT-001 | AML structuring ring: requires inspection + SAR filing before terminal action | `reject` + `file_sar` |
-| CRIT-002 | KYC expiry bypass: counterparty exploiting grace period; verify_kyc needed | `hold` |
-| CRIT-003 | Sanctions evasion via shell company chain; contact_sender + escalate required | `escalate` |
-| CRIT-004 | Politically Exposed Person (PEP) large transfer to unknown shell entity | `escalate` |
+| CRIT-001 | Multi-step chain: large wire to new counterparty; agent must inspect then request docs before deciding (chain of 3) | `approve` |
+| CRIT-002 | Fraud ring: coordinated small payments from 3 related accounts aggregating above reporting threshold; SAR required | `reject` |
+| CRIT-003 | Trade-based money laundering: over-invoiced international trade payment (4× market price); regulatory escalation required | `escalate` |
+| CRIT-004 | Compromised corporate account: geo-impossible login (NY → Lagos in 8 min); confirmed account takeover | `reject` |
 
 ---
 
@@ -181,8 +207,8 @@ curl http://localhost:8000/health
 ### Run the baseline agent
 
 ```bash
-# From the project root
-PYTHONPATH=$(pwd) python payops_env/scripts/baseline_agent.py
+# Via the API endpoint (no extra script needed)
+curl -s -X POST http://localhost:8000/baseline | python3 -m json.tool
 ```
 
 ### Docker
@@ -246,7 +272,7 @@ The rule-based baseline agent uses a deterministic priority-ordered policy.
 
 Scores vary slightly per run due to per-episode parameter jitter (see below).
 
-Run `POST /baseline` or `python payops_env/scripts/baseline_agent.py` to reproduce.
+Run `POST /baseline` to reproduce.
 
 ---
 
@@ -259,8 +285,6 @@ payops_env/
 ├── tasks.py               # 20 tasks (EASY×4, MED×6, HARD×6, CRIT×4) with ground-truth labels
 ├── grader.py              # Partial-credit reward function + episode grader
 ├── scripts_util.py        # Baseline runner helper (used by /baseline endpoint)
-├── scripts/
-│   └── baseline_agent.py  # Standalone rule-based baseline agent
 ├── server/
 │   └── app.py             # FastAPI server with all required endpoints
 ├── inference.py           # Competition inference script (OpenAI client, root-level)
@@ -292,12 +316,12 @@ Rewards are dense across the full trajectory, not just on the final decision:
 
 | Component | Value | Condition |
 |-----------|-------|-----------|
-| Correct terminal action | **+0.60** | per task |
-| Investigation sub-action | **+0.20** | per eligible sub-action, first use only |
-| Flag identification | **+0.20** | agent used `inspect` AND task has key diagnostic flags |
+| Correct terminal action | **+1.0** | per task (difficulty-weighted in episode score) |
+| Investigation sub-action | **+0.15** | per eligible sub-action, first use only |
+| Flag identification | **+0.20** | agent used `inspect` AND key diagnostic flags present |
 | Confidence bonus | +0.10 | confidence ≥ 0.8 AND correct |
 | Confidence penalty | −0.10 | confidence ≥ 0.8 AND wrong |
-| Regulatory SAR bonus | +0.20 | `file_sar` before terminal on regulatory task |
+| Regulatory SAR bonus | +0.20 | `file_sar` before terminal on a regulatory task |
 | Duplicate investigation | −0.05 | same sub-action used twice on same task |
 | Approve a fraud/sanctioned | **−1.00** | worst mistake |
 
