@@ -303,8 +303,8 @@ REPLAY_PERFECT='{"actions":["approve","reject","approve","flag",
 R=$(curl -s -X POST $BASE/replay \
     -H "Content-Type: application/json" \
     -d "$REPLAY_PERFECT")
-check "I-01  Replay 20 correct actions → score=1.0" "$R" '"normalised_score":1.0'
-check "I-02  Replay → passed=true" "$R" '"passed":true'
+check "I-01  Replay correct terminals (no investigation) → score<1.0 (hard/critical penalised)" "$R" '"normalised_score":0\.[7-9]'
+check "I-02  Replay → passed=true (score>0.5 despite penalty)" "$R" '"passed":true'
 check "I-03  Replay → budget_spent=0.0 (no inv actions)" "$R" '"budget_spent":0.0'
 
 # I-04  Replay with investigation actions included
@@ -408,7 +408,7 @@ check "L-06  GET /leaderboard → budget_spent in entry" "$LB" '"budget_spent":'
 # ═══════════════════════════════════════════════════════════
 # GROUP M — Perfect episode score
 # ═══════════════════════════════════════════════════════════
-section "GROUP M — Perfect episode (all 20 correct, no investigation cost)"
+section "GROUP M — Perfect episode (all 20 correct + investigation on hard/critical)"
 
 reset
 BASE=$BASE python3 - <<'PYEOF'
@@ -424,16 +424,39 @@ def post(path, body=None):
     with urllib.request.urlopen(req, context=_ssl) as r: return json.loads(r.read())
 
 post("/reset", {"seed": 0})
-actions = [
+# Easy + medium: terminal only
+for action, txn in [
   ("approve","TXN-E001"),("reject","TXN-E002"),("approve","TXN-E003"),("flag","TXN-E004"),
   ("escalate","TXN-M001"),("hold","TXN-M002"),("flag","TXN-M003"),("flag","TXN-M004"),
   ("hold","TXN-M005"),("escalate","TXN-M006"),
-  ("escalate","TXN-H001"),("reject","TXN-H002"),("reject","TXN-H003"),("approve","TXN-H004"),
-  ("escalate","TXN-H005"),("flag","TXN-H006"),
-  ("approve","TXN-C001"),("reject","TXN-C002"),("escalate","TXN-C003"),("reject","TXN-C004"),
-]
-for action, txn in actions:
+]:
     post("/step", {"action_type": action, "transaction_id": txn})
+# Hard tasks: one required investigation sub-action before each terminal
+post("/step", {"action_type": "inspect",         "transaction_id": "TXN-H001"})
+post("/step", {"action_type": "escalate",        "transaction_id": "TXN-H001"})
+post("/step", {"action_type": "contact_sender",  "transaction_id": "TXN-H002"})
+post("/step", {"action_type": "reject",          "transaction_id": "TXN-H002"})
+post("/step", {"action_type": "inspect",         "transaction_id": "TXN-H003"})
+post("/step", {"action_type": "reject",          "transaction_id": "TXN-H003"})
+post("/step", {"action_type": "inspect",         "transaction_id": "TXN-H004"})
+post("/step", {"action_type": "approve",         "transaction_id": "TXN-H004"})
+post("/step", {"action_type": "inspect",         "transaction_id": "TXN-H005"})
+post("/step", {"action_type": "contact_sender",  "transaction_id": "TXN-H005"})
+post("/step", {"action_type": "escalate",        "transaction_id": "TXN-H005"})
+post("/step", {"action_type": "inspect",         "transaction_id": "TXN-H006"})
+post("/step", {"action_type": "flag",            "transaction_id": "TXN-H006"})
+# Critical tasks: required investigation sub-actions before each terminal
+post("/step", {"action_type": "inspect",         "transaction_id": "TXN-C001"})
+post("/step", {"action_type": "request_docs",    "transaction_id": "TXN-C001"})
+post("/step", {"action_type": "approve",         "transaction_id": "TXN-C001"})
+post("/step", {"action_type": "inspect",         "transaction_id": "TXN-C002"})
+post("/step", {"action_type": "reject",          "transaction_id": "TXN-C002"})
+post("/step", {"action_type": "request_docs",    "transaction_id": "TXN-C003"})
+post("/step", {"action_type": "inspect",         "transaction_id": "TXN-C003"})
+post("/step", {"action_type": "escalate",        "transaction_id": "TXN-C003"})
+post("/step", {"action_type": "inspect",         "transaction_id": "TXN-C004"})
+post("/step", {"action_type": "contact_sender",  "transaction_id": "TXN-C004"})
+post("/step", {"action_type": "reject",          "transaction_id": "TXN-C004"})
 PYEOF
 
 GRADER="$(curl -s $BASE/grader)"
@@ -457,12 +480,12 @@ FULL=$(curl -s -X POST $BASE/replay \
     -d "$REPLAY_CRIT")
 check "N-01  Full correct replay → max_possible_reward includes weights" \
   "$FULL" '"max_possible_reward":2[0-9]\.'
-check "N-02  Full correct → total_reward equals max_possible" \
+check "N-02  Correct-but-no-investigation → total_reward below max (penalty applied)" \
   "$(echo "$FULL" | python3 -c "
 import sys,json,re
 d=json.load(sys.stdin)
-print('EQUAL' if abs(d['total_reward']-d['max_possible_reward'])<0.01 else 'DIFF')
-")" "EQUAL"
+print('DIFF' if d['total_reward'] < d['max_possible_reward'] - 0.01 else 'EQUAL')
+")" "DIFF"
 
 # ═══════════════════════════════════════════════════════════
 # GROUP O — Budget mechanics

@@ -134,6 +134,7 @@ class BaselineResult(BaseModel):
 class ReplayRequest(BaseModel):
     actions: List[str]
     confidences: Optional[List[Optional[float]]] = None
+    seed: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -345,10 +346,12 @@ async def analytics():
 @app.post("/replay", summary="Grade a supplied action sequence")
 async def replay(request: ReplayRequest):
     """
-    Grade a supplied list of actions against the full task bank without
+    Grade a supplied list of actions against the task bank without
     modifying the current environment state.
 
-    Useful for offline evaluation and leaderboard submissions.
+    Pass ``seed`` to grade against a specific jittered task set (matching a
+    live episode seeded with the same value).  Omitting ``seed`` grades
+    against the canonical un-jittered tasks for offline baseline comparisons.
     """
     actions = [a.lower() for a in request.actions]
     invalid = [a for a in actions if a not in VALID_ACTIONS]
@@ -358,8 +361,15 @@ async def replay(request: ReplayRequest):
             detail=f"Invalid action(s): {invalid}. Valid: {sorted(VALID_ACTIONS)}",
         )
 
+    if request.seed is not None:
+        _replay_env = PayOpsEnvironment()
+        await _replay_env.reset_async(seed=request.seed)
+        task_list = list(_replay_env._tasks)
+    else:
+        task_list = list(TASKS)
+
     confs  = request.confidences or [None] * len(actions)
-    result = grade_episode(actions, list(TASKS), confs)
+    result = grade_episode(actions, task_list, confs)
     return {
         "total_reward":        result.total_reward,
         "max_possible_reward": result.max_possible_reward,

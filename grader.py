@@ -16,9 +16,11 @@ Terminal action credit is now split:
 
 Skip-investigation penalty (hard / critical tasks only):
   Agent issued zero investigation sub-actions on a task that has
-  requires_investigation AND got the terminal action wrong →
-  partial credit is multiplied by 0.50.  Correct terminal actions
-  are NEVER penalised by this rule.
+  requires_investigation:
+    • Wrong terminal action  → credit × 0.50
+    • Correct terminal action → credit × 0.80
+  Correct actions that skip investigation still earn partial credit,
+  but the full reward requires proper investigation first.
 
 Investigation sub-action bonuses (per eligible, first use only):
   Used one of task.requires_investigation  → +0.15
@@ -67,9 +69,11 @@ CONFIDENCE_CORRECT_BONUS = 0.10
 CONFIDENCE_WRONG_PENALTY = -0.10
 REGULATORY_BONUS         = 0.20
 BUDGET_OVERSPEND_PENALTY = 0.10
-# Skip-investigation penalty: wrong terminal on hard/critical with no investigation
-# cuts partial credit in half.  Correct terminal actions are NEVER penalised.
-SKIP_INVESTIGATION_MULTIPLIER = 0.50
+# Skip-investigation penalty for hard/critical tasks with requires_investigation.
+# Applied when the agent issued ZERO investigation sub-actions for that task.
+# Wrong terminal: halved.  Correct terminal: 20% reduction (still well above minimum).
+SKIP_INVESTIGATION_MULTIPLIER       = 0.50   # applied to wrong terminals
+SKIP_INV_CORRECT_MULTIPLIER         = 0.80   # applied to correct terminals
 
 DIFFICULTY_WEIGHT: Dict[str, float] = {
     "easy":     1.0,
@@ -164,18 +168,16 @@ def _grade_single_task(
     correct = terminal_action == task.correct_action
 
     # ── skip-investigation penalty ───────────────────────────────────────────
-    # If the agent issued NO investigation sub-actions on a hard/critical task
-    # that explicitly requires them, AND the terminal action is wrong, halve the
-    # partial credit.  Correct terminal actions are never penalised (preserves
-    # test I-01 where all-correct + no-investigation still scores 1.0).
+    # Hard/critical tasks with requires_investigation penalise agents that skip
+    # all investigation sub-actions before making the terminal call.
+    # Wrong terminal  → halve the credit (existing behaviour).
+    # Correct terminal → 20% reduction; full reward requires investigation first.
     requires_inv = getattr(task, "requires_investigation", set())
-    if (
-        not correct
-        and requires_inv
-        and not investigation_actions
-        and task.difficulty in ("hard", "critical")
-    ):
-        base = base * SKIP_INVESTIGATION_MULTIPLIER
+    if requires_inv and not investigation_actions and task.difficulty in ("hard", "critical"):
+        if not correct:
+            base = base * SKIP_INVESTIGATION_MULTIPLIER
+        else:
+            base = base * SKIP_INV_CORRECT_MULTIPLIER
 
     # ── investigation trajectory bonus & time penalty ────────────────────────
     inv_bonus  = 0.0
