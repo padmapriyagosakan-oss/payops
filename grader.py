@@ -123,15 +123,25 @@ def step_reward(
     action_type: str,
     task: PayOpsTask,
     inspected_already: bool = False,
+    investigation_done: bool = True,
 ) -> float:
     """
     Single-step reward used by the real-time environment (step_async).
-    Investigation bonuses are now INVESTIGATION_BONUS (0.20).
+
+    ``investigation_done`` must be False when the agent issued zero
+    investigation sub-actions for this task — the same skip-investigation
+    penalty applied by grade_episode is then applied here so the per-step
+    reward the agent sees during training matches the final episode score.
     """
     if _is_investigation(action_type):
         return 0.0 if inspected_already else INVESTIGATION_BONUS
 
-    return _base_terminal_reward(action_type, task)
+    base = _base_terminal_reward(action_type, task)
+    requires_inv = getattr(task, "requires_investigation", set())
+    if requires_inv and not investigation_done and task.difficulty in ("hard", "critical"):
+        correct = action_type == task.correct_action
+        base = base * (SKIP_INV_CORRECT_MULTIPLIER if correct else SKIP_INVESTIGATION_MULTIPLIER)
+    return base
 
 
 # ---------------------------------------------------------------------------
@@ -356,7 +366,16 @@ def grade_episode(
 # Convenience wrapper used by the environment
 # ---------------------------------------------------------------------------
 
-def grade(action_type: str, task: PayOpsTask, inspected_already: bool = False) -> float:
+def grade(
+    action_type: str,
+    task: PayOpsTask,
+    inspected_already: bool = False,
+    investigation_done: bool = True,
+) -> float:
     """Single-step reward used inside environment.step_async."""
-    return step_reward(action_type, task, inspected_already=inspected_already)
+    return step_reward(
+        action_type, task,
+        inspected_already=inspected_already,
+        investigation_done=investigation_done,
+    )
 

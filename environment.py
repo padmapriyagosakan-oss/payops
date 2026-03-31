@@ -257,7 +257,12 @@ class PayOpsEnvironment:
         sar_used = task_id in self._sar_filed
         inspected_already = "inspect" in self._used_inv.get(task_id, set())
 
-        reward = grade(action_type, task, inspected_already=inspected_already)
+        investigation_done = bool(self._used_inv.get(task_id, set()))
+        reward = grade(
+            action_type, task,
+            inspected_already=inspected_already,
+            investigation_done=investigation_done,
+        )
         self._state.cumulative_reward = round(
             self._state.cumulative_reward + reward, 4
         )

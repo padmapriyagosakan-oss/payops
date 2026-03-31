@@ -157,10 +157,6 @@ def build_observation_text(obs: dict) -> str:
         f"Budget Remaining: {obs.get('budget_remaining', 5.0):.2f}",
         f"Step           : {obs.get('chain_step', 1)}/{obs.get('chain_total', 1)}",
     ]
-    # Show investigation hints prominently when present
-    hints = obs.get('investigation_hints', [])
-    if hints:
-        lines.append(f"INVESTIGATION RECOMMENDED: {', '.join(hints)} (use these before deciding for bonus reward + better evidence)")
     # Append revealed intel if present
     for field, label in [
         ("inspection_notes", "Inspection Notes"),
