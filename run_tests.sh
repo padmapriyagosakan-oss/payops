@@ -45,7 +45,7 @@ step() {
 }
 
 reset() {
-  curl -s -X POST "$BASE/reset" > /dev/null
+  curl -s -X POST "$BASE/reset" -H 'Content-Type: application/json' -d '{"seed":0}' > /dev/null
 }
 
 section() {
@@ -369,7 +369,7 @@ def post(path, body=None):
 def get(path):
     with urllib.request.urlopen(f"{BASE}{path}", context=_ssl) as r: return json.loads(r.read())
 
-post("/reset")
+post("/reset", {"seed": 0})
 actions = [
   ("approve","TXN-E001"),("reject","TXN-E002"),("approve","TXN-E003"),("flag","TXN-E004"),
   ("escalate","TXN-M001"),("hold","TXN-M002"),("flag","TXN-M003"),("flag","TXN-M004"),
@@ -423,7 +423,7 @@ def post(path, body=None):
         headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(req, context=_ssl) as r: return json.loads(r.read())
 
-post("/reset")
+post("/reset", {"seed": 0})
 actions = [
   ("approve","TXN-E001"),("reject","TXN-E002"),("approve","TXN-E003"),("flag","TXN-E004"),
   ("escalate","TXN-M001"),("hold","TXN-M002"),("flag","TXN-M003"),("flag","TXN-M004"),

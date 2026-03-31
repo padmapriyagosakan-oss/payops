@@ -84,6 +84,27 @@ class PayOpsEnvironment:
                 jt.velocity_24h = max(0, t.velocity_24h + rng.randint(-3, 3))
             jittered.append(jt)
         self._tasks = jittered
+        # Apply jitter variants: for borderline tasks the correct_action can change
+        # based on jittered values, preventing memorisation of fixed correct answers.
+        for jt in self._tasks:
+            if jt.task_id == "EASY-004":
+                # Base velocity_1h=15 (jittered 12–18).
+                # >= 17: card-clone severity warrants immediate escalation.
+                if (jt.velocity_1h or 0) >= 17:
+                    jt.correct_action = "escalate"
+                    jt.partial_credit_actions = {"flag": 0.5, "hold": 0.4}
+            elif jt.task_id == "MED-003":
+                # Base amount≈450 (jittered 382–540).
+                # >= 500: spike is large enough to hold rather than flag.
+                if jt.amount >= 500.0:
+                    jt.correct_action = "hold"
+                    jt.partial_credit_actions = {"flag": 0.5, "escalate": 0.3}
+            elif jt.task_id == "MED-004":
+                # Base risk_score=0.58 (jittered ±0.03).
+                # >= 0.62: risk crosses the senior-review threshold → escalate.
+                if jt.risk_score >= 0.62:
+                    jt.correct_action = "escalate"
+                    jt.partial_credit_actions = {"flag": 0.5, "hold": 0.3}
         self._current_task = self._tasks[0]
         self._used_inv = {}
         self._sar_filed = set()
@@ -301,7 +322,7 @@ class PayOpsEnvironment:
             steps_remaining=steps_remaining,
             action_cost=ACTION_COSTS.get(info.get("event", ""), 0.0),
             budget_remaining=round(self.BUDGET_LIMIT - self._state.budget_spent, 4),
-            investigation_hints=sorted(getattr(task, "requires_investigation", set()) or []),
+            investigation_hints=[],  # not surfaced upfront; agent must explore
             recent_decisions=list(self._recent_decisions),
             reward=reward,
             cumulative_reward=self._state.cumulative_reward,

@@ -169,8 +169,9 @@ async def run_baseline() -> Tuple[List[Dict[str, Any]], float, float, int]:
         confs.append(None)
         step += 1
 
+    jittered_tasks = list(env._tasks)
     env.close()
 
-    result = grade_episode(actions_taken, list(TASKS), confs)
+    result = grade_episode(actions_taken, jittered_tasks, confs)
     return result.per_task_rewards, result.total_reward, result.normalised_score, step
 

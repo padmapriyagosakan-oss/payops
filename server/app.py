@@ -48,14 +48,25 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# Single shared environment instance (suitable for single-user / HF Space use)
-_env = PayOpsEnvironment()
-_episode_actions: List[str] = []          # ALL actions including investigation
-_episode_confs: List[Optional[float]] = []
-_episode_tasks: List[Any] = []
+# Per-session environment instances — one per /reset call.
+# Keyed by episode_id; keeps the last _MAX_SESSIONS sessions to bound memory.
+_MAX_SESSIONS = 20
+_sessions: Dict[str, Dict[str, Any]] = {}
+_current_session_id: Optional[str] = None
+_state_lock = asyncio.Lock()   # serialises all state-mutating handlers
 
 # Leaderboard persists for the process lifetime
 _leaderboard: List[Dict[str, Any]] = []
+
+
+def _current_session() -> Dict[str, Any]:
+    """Return the session dict for the active episode, or raise HTTP 400."""
+    if _current_session_id is None or _current_session_id not in _sessions:
+        raise HTTPException(
+            status_code=400,
+            detail="No active session. Call /reset first.",
+        )
+    return _sessions[_current_session_id]
 
 
 # ---------------------------------------------------------------------------
@@ -132,11 +143,22 @@ class ReplayRequest(BaseModel):
 @app.post("/reset", response_model=EnvResponse, summary="Reset the environment")
 async def reset(request: ResetRequest = ResetRequest()):
     """Reset the environment and return the first transaction observation."""
-    global _episode_actions, _episode_tasks, _episode_confs
-    _episode_actions = []
-    _episode_confs   = []
-    _episode_tasks   = list(TASKS)
-    obs = await _env.reset_async(seed=request.seed, episode_id=request.episode_id)
+    global _current_session_id
+    async with _state_lock:
+        env = PayOpsEnvironment()
+        obs = await env.reset_async(seed=request.seed, episode_id=request.episode_id)
+        session_id = env.state().episode_id
+        _sessions[session_id] = {
+            "env":     env,
+            "actions": [],
+            "confs":   [],
+            "tasks":   list(env._tasks),   # jittered tasks for this episode
+        }
+        _current_session_id = session_id
+        # Prune oldest sessions when the cap is exceeded
+        if len(_sessions) > _MAX_SESSIONS:
+            oldest = next(iter(_sessions))
+            del _sessions[oldest]
     return EnvResponse(observation=obs.model_dump(), reward=None, done=False)
 
 
@@ -158,31 +180,33 @@ async def step(request: UnifiedStepRequest):
             detail=f"Invalid action_type '{action.action_type}'. "
                    f"Valid values: {sorted(VALID_ACTIONS)}",
         )
-    try:
-        obs = await _env.step_async(action)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    async with _state_lock:
+        sess = _current_session()
+        try:
+            obs = await sess["env"].step_async(action)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
-    _episode_actions.append(action.action_type.lower())
-    _episode_confs.append(action.confidence)
+        sess["actions"].append(action.action_type.lower())
+        sess["confs"].append(action.confidence)
 
-    # Auto-save completed episode to leaderboard
-    if obs.done:
-        result = grade_episode(
-            _episode_actions, _episode_tasks, _episode_confs
-        )
-        _leaderboard.append(
-            {
-                "episode_id":       _env.state().episode_id,
-                "timestamp":        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "normalised_score": result.normalised_score,
-                "total_reward":     result.total_reward,
-                "budget_spent":     result.budget_spent,
-                "budget_overspend": result.budget_overspend,
-                "passed":           result.passed,
-                "steps":            len(_episode_actions),
-            }
-        )
+        # Auto-save completed episode to leaderboard
+        if obs.done:
+            result = grade_episode(
+                sess["actions"], sess["tasks"], sess["confs"]
+            )
+            _leaderboard.append(
+                {
+                    "episode_id":       sess["env"].state().episode_id,
+                    "timestamp":        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "normalised_score": result.normalised_score,
+                    "total_reward":     result.total_reward,
+                    "budget_spent":     result.budget_spent,
+                    "budget_overspend": result.budget_overspend,
+                    "passed":           result.passed,
+                    "steps":            len(sess["actions"]),
+                }
+            )
 
     return EnvResponse(observation=obs.model_dump(), reward=obs.reward, done=obs.done)
 
@@ -190,7 +214,8 @@ async def step(request: UnifiedStepRequest):
 @app.get("/state", response_model=PayOpsState, summary="Get internal environment state")
 async def state():
     """Return the current internal state of the environment."""
-    return _env.state()
+    async with _state_lock:
+        return _current_session()["env"].state()
 
 
 @app.get("/schema", summary="Get action and observation schemas")
@@ -234,12 +259,14 @@ async def grader():
     """
     Grade the episode using all actions taken since the last /reset.
     """
-    if not _episode_actions:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "No actions recorded. Run /reset then /step first."},
-        )
-    result = grade_episode(_episode_actions, _episode_tasks, _episode_confs)
+    async with _state_lock:
+        sess = _current_session()
+        if not sess["actions"]:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No actions recorded. Run /reset then /step first."},
+            )
+        result = grade_episode(sess["actions"], sess["tasks"], sess["confs"])
     return {
         "total_reward":       result.total_reward,
         "max_possible_reward":result.max_possible_reward,
@@ -277,8 +304,14 @@ async def analytics():
     if not _leaderboard:
         return {"message": "No completed episodes yet. Run a full episode first."}
 
+    async with _state_lock:
+        sess = _current_session()
+        actions = list(sess["actions"])
+        tasks   = list(sess["tasks"])
+        confs   = list(sess["confs"])
+
     # Per-difficulty accuracy from the last episode's per_task breakdown
-    result = grade_episode(_episode_actions, _episode_tasks, _episode_confs)
+    result = grade_episode(actions, tasks, confs)
     by_diff: Dict[str, Dict] = defaultdict(lambda: {"total": 0, "correct": 0, "rewards": []})
     for pt in result.per_task_rewards:
         d = pt["difficulty"]
@@ -430,16 +463,27 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/health", summary="Health check")
 async def health():
-    state = _env.state()
+    async with _state_lock:
+        if _current_session_id and _current_session_id in _sessions:
+            st = _sessions[_current_session_id]["env"].state()
+            episode_id   = st.episode_id
+            episode_seed = st.episode_seed
+            current_task = st.current_task_id
+            processed    = st.transactions_processed
+            total        = st.total_tasks
+        else:
+            episode_id = episode_seed = current_task = None
+            processed  = 0
+            total      = len(TASKS)
     return {
         "status": "ok",
         "environment": "payops_env",
         "version": "2.0.0",
-        "episode_id": state.episode_id,
-        "episode_seed": state.episode_seed,
-        "current_task_id": state.current_task_id,
-        "transactions_processed": state.transactions_processed,
-        "total_tasks": state.total_tasks,
+        "episode_id": episode_id,
+        "episode_seed": episode_seed,
+        "current_task_id": current_task,
+        "transactions_processed": processed,
+        "total_tasks": total,
     }
 
 
