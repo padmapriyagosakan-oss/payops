@@ -240,8 +240,10 @@ def run_inference() -> dict:
 
     step_count = 0
     start_time = time.time()
-    MAX_STEPS = 200       # safety limit
-    MAX_INV_PER_TASK = 3  # max investigation actions per task before forcing terminal
+    # Hard caps to guarantee <20 min runtime on any inference endpoint.
+    # Worst case: 55 steps × 15 s/call ≈ 825 s (~14 min); well inside the 20 min limit.
+    MAX_STEPS = 55        # absolute hard cap across the whole episode
+    MAX_INV_PER_TASK = 2  # max investigation actions per task before forcing terminal decision
 
     # Per-task investigation counter: task_id → count
     inv_counts: dict = {}

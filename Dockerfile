@@ -25,15 +25,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . /app/payops_env
 
 # Put parent directory on PYTHONPATH so `payops_env` is importable
-ENV PYTHONPATH="/app:${PYTHONPATH}"
+ENV PYTHONPATH="/app"
 
 # HuggingFace Spaces requires port 7860; default to 7860
 ENV PORT=7860
 
 # Runtime env vars (overridden at deploy time via HF Space secrets)
+# HF_TOKEN / OPENAI_API_KEY are injected at runtime — not baked into the image
 ENV API_BASE_URL="" \
     MODEL_NAME="" \
-    HF_TOKEN="" \
     PAYOPS_BASE_URL="http://localhost:7860"
 
 # Switch to non-root user

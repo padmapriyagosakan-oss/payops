@@ -25,6 +25,7 @@ import os
 import subprocess
 import sys
 import time
+import ssl
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -65,8 +66,16 @@ def section(title: str):
     print(f"\n{CYAN}{BOLD}── {title} ──{RESET}")
 
 
+# SSL context that accepts HF Space / Let's Encrypt certs on all Python versions.
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode    = ssl.CERT_NONE
+
+
 def http_get(url: str, timeout: int = 10) -> dict:
-    with urllib.request.urlopen(url, timeout=timeout) as r:
+    req = urllib.request.Request(url, method="GET")
+    ctx = _SSL_CTX if url.startswith("https://") else None
+    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
         return json.loads(r.read())
 
 
@@ -77,7 +86,8 @@ def http_post(url: str, body: dict | None = None, timeout: int = 30) -> dict:
         headers={"Content-Type": "application/json"},
         method="POST"
     )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    ctx = _SSL_CTX if url.startswith("https://") else None
+    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
         return json.loads(r.read())
 
 
@@ -233,7 +243,7 @@ def check_environment():
             ok(f"step(approve) reward={obs3.reward}")
 
             # state()
-            state = env.get_state()
+            state = env._state
             if state.step_count > 0:
                 ok(f"state() step_count={state.step_count}")
             else:
@@ -263,20 +273,13 @@ def check_grader():
         else:
             fail(f"Task bank has only {len(TASKS)} tasks (need >= 3)")
 
-        # Grade a minimal episode: first 3 tasks correct
-        sample_history = []
-        for task in TASKS[:5]:
-            sample_history.append({
-                "task_id":        task["task_id"],
-                "difficulty":     task["difficulty"],
-                "terminal_action": task["correct_action"],
-                "investigation_used": [],
-                "time_steps_used": 1,
-                "confidence": None,
-                "regulatory_action": task.get("regulatory_action", False),
-            })
+        # Grade a minimal episode using the real grade_episode signature:
+        # grade_episode(actions, tasks, confidences, budget_limit)
+        # Use correct terminal actions for first 5 tasks.
+        sample_tasks = list(TASKS[:5])
+        sample_actions = [t.correct_action for t in sample_tasks]
 
-        result = grade_episode(sample_history, budget_spent=0.0, budget_limit=5.0)
+        result = grade_episode(sample_actions, sample_tasks, budget_limit=5.0)
 
         if 0.0 <= result.normalised_score <= 1.0:
             ok(f"grade_episode() score in [0,1]: {result.normalised_score:.4f}")
@@ -284,8 +287,8 @@ def check_grader():
             fail(f"grade_episode() score out of range: {result.normalised_score}")
 
         # Check each task graded
-        for pt in result.per_task:
-            score = pt.get("reward", 0)
+        for pt in result.per_task_rewards:
+            score = pt.get("weighted_reward", pt.get("reward", 0))
             ok(f"  {pt.get('task_id'):12s} reward={score:+.3f}")
 
         ok("grade_episode() completes without error")
@@ -310,7 +313,9 @@ def check_server(base_url: str):
 
     # reset() — must return 200 and a valid observation
     try:
-        obs = http_post(f"{base_url}/reset")
+        raw_reset = http_post(f"{base_url}/reset")
+        # Support both wrapped {"observation":{...}} and legacy flat format
+        obs = raw_reset.get("observation", raw_reset) if isinstance(raw_reset.get("observation"), dict) else raw_reset
         if "task_id" in obs:
             ok(f"POST /reset → 200, task_id={obs['task_id']}")
         else:
@@ -325,9 +330,12 @@ def check_server(base_url: str):
 
     # step()
     try:
-        step = http_post(f"{base_url}/step", {"action_type": "inspect", "transaction_id": "TXN-E001"})
-        if "reward" in step:
-            ok(f"POST /step (inspect) → reward={step['reward']}")
+        raw_step = http_post(f"{base_url}/step", {"action_type": "inspect", "transaction_id": "TXN-E001"})
+        step = raw_step.get("observation", raw_step) if isinstance(raw_step.get("observation"), dict) else raw_step
+        # reward is at top level in both wrapped and flat formats
+        reward_val = raw_step.get("reward", step.get("reward"))
+        if reward_val is not None:
+            ok(f"POST /step (inspect) → reward={reward_val}")
         else:
             fail("POST /step → missing reward in response")
     except Exception as e:
