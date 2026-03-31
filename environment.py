@@ -86,6 +86,7 @@ class PayOpsEnvironment:
         self._tasks = jittered
         # Apply jitter variants: for borderline tasks the correct_action can change
         # based on jittered values, preventing memorisation of fixed correct answers.
+        # Variants cover 10 of 20 tasks for broad anti-memorisation coverage.
         for jt in self._tasks:
             if jt.task_id == "EASY-004":
                 # Base velocity_1h=15 (jittered 12–18).
@@ -93,18 +94,69 @@ class PayOpsEnvironment:
                 if (jt.velocity_1h or 0) >= 17:
                     jt.correct_action = "escalate"
                     jt.partial_credit_actions = {"flag": 0.5, "hold": 0.4}
+
+            elif jt.task_id == "MED-001":
+                # Base risk_score=0.52, amount=85k (cross-border B2B).
+                # Low jitter: if risk drops below 0.48 AND amount stays modest → approve.
+                if jt.risk_score < 0.48 and jt.amount < 90_000:
+                    jt.correct_action = "approve"
+                    jt.partial_credit_actions = {"escalate": 0.5, "flag": 0.3}
+
             elif jt.task_id == "MED-003":
                 # Base amount≈450 (jittered 382–540).
                 # >= 500: spike is large enough to hold rather than flag.
                 if jt.amount >= 500.0:
                     jt.correct_action = "hold"
                     jt.partial_credit_actions = {"flag": 0.5, "escalate": 0.3}
+
             elif jt.task_id == "MED-004":
                 # Base risk_score=0.58 (jittered ±0.03).
                 # >= 0.62: risk crosses the senior-review threshold → escalate.
                 if jt.risk_score >= 0.62:
                     jt.correct_action = "escalate"
                     jt.partial_credit_actions = {"flag": 0.5, "hold": 0.3}
+
+            elif jt.task_id == "MED-006":
+                # Base risk_score=0.56, amount=120k real-estate advance.
+                # Low jitter: if risk drops below 0.50 and amount < 110k → hold not escalate.
+                if jt.risk_score < 0.50 and jt.amount < 110_000:
+                    jt.correct_action = "hold"
+                    jt.partial_credit_actions = {"flag": 0.4, "escalate": 0.5}
+
+            elif jt.task_id == "HARD-001":
+                # Base risk_score=0.18 (poisoned), counterparty=watchlist.
+                # If velocity_1h jitters up to >= 3: pattern is undeniable → reject not escalate.
+                if (jt.velocity_1h or 0) >= 3:
+                    jt.correct_action = "reject"
+                    jt.partial_credit_actions = {"escalate": 0.5, "flag": 0.4, "hold": 0.3}
+
+            elif jt.task_id == "HARD-006":
+                # Base amount=3200 EUR, risk=0.63 (ghost account / mule reactivation).
+                # High spike: if amount >= 3700 → escalate urgently, not just flag.
+                if jt.amount >= 3_700:
+                    jt.correct_action = "escalate"
+                    jt.partial_credit_actions = {"flag": 0.5, "hold": 0.4}
+
+            elif jt.task_id == "CRIT-001":
+                # Base risk_score=0.59 (PE wire, legit).
+                # If risk jitters above 0.80 → escalate for extra scrutiny before approve.
+                if jt.risk_score >= 0.80:
+                    jt.correct_action = "escalate"
+                    jt.partial_credit_actions = {"flag": 0.4, "hold": 0.35, "approve": 0.3}
+
+            elif jt.task_id == "CRIT-003":
+                # Base amount=680k trade-based ML (escalate).
+                # If amount jitters very high (>= 780k) → reject outright; over-invoicing extreme.
+                if jt.amount >= 780_000:
+                    jt.correct_action = "reject"
+                    jt.partial_credit_actions = {"escalate": 0.5, "flag": 0.3}
+
+            elif jt.task_id == "CRIT-004":
+                # Base risk=0.81, geo-impossible ATO (reject).
+                # If risk jitters below 0.75 → hold pending contact_sender confirmation.
+                if jt.risk_score < 0.75:
+                    jt.correct_action = "hold"
+                    jt.partial_credit_actions = {"escalate": 0.5, "reject": 0.4}
         self._current_task = self._tasks[0]
         self._used_inv = {}
         self._sar_filed = set()
@@ -271,6 +323,13 @@ class PayOpsEnvironment:
         task = self._current_task
         steps_remaining = self._state.total_tasks - self._state.transactions_processed
 
+        # Progressive disclosure: sensitive forensic fields are only surfaced after
+        # the agent has called 'inspect' on this task.  This makes the investigate-
+        # before-deciding mechanic load-bearing rather than cosmetic.
+        task_id = task.task_id
+        inspected = "inspect" in self._used_inv.get(task_id, set())
+        contacted = "contact_sender" in self._used_inv.get(task_id, set())
+
         return PayOpsObservation(
             # ── transaction core ──
             transaction_id=task.transaction_id,
@@ -295,9 +354,9 @@ class PayOpsEnvironment:
             country_risk=task.country_risk,
             kyc_status=task.kyc_status,
             kyc_expiry_days=getattr(task, "kyc_expiry_days", None),
-            previous_violations=task.previous_violations,
-            previous_sars=getattr(task, "previous_sars", None),
-            counterparty_risk=getattr(task, "counterparty_risk", None),
+            previous_violations=task.previous_violations if inspected else None,
+            previous_sars=getattr(task, "previous_sars", None) if inspected else None,
+            counterparty_risk=getattr(task, "counterparty_risk", None) if inspected else None,
             # ── chain context ──
             chain_total=getattr(task, "chain_total", 1),
             chain_step=self._state.step_count,
@@ -313,7 +372,8 @@ class PayOpsEnvironment:
                 reveal_text if reveal_field == "kyc_notes" else None
             ),
             contact_notes=(
-                reveal_text if reveal_field == "contact_notes" else None
+                reveal_text if reveal_field == "contact_notes"
+                else (info.get("contact_notes") if contacted else None)
             ),
             # ── episode meta ──
             task_id=task.task_id,
@@ -327,7 +387,7 @@ class PayOpsEnvironment:
             reward=reward,
             cumulative_reward=self._state.cumulative_reward,
             done=done,
-            network_graph=getattr(task, "network_graph", None),
+            network_graph=getattr(task, "network_graph", None) if inspected else None,
             info=info,
         )
 
