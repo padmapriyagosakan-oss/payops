@@ -24,7 +24,7 @@ from typing import Deque, List, Optional
 
 from payops_env.grader import INVESTIGATION_BONUS, grade
 from payops_env.models import PayOpsAction, PayOpsObservation, PayOpsState
-from payops_env.tasks import ACTION_COSTS, TASKS, PayOpsTask
+from payops_env.tasks import ACTION_COSTS, TASK_VARIANTS, TASKS, PayOpsTask
 
 
 TERMINAL_ACTIONS   = {"approve", "reject", "flag", "escalate", "hold"}
@@ -84,79 +84,27 @@ class PayOpsEnvironment:
                 jt.velocity_24h = max(0, t.velocity_24h + rng.randint(-3, 3))
             jittered.append(jt)
         self._tasks = jittered
-        # Apply jitter variants: for borderline tasks the correct_action can change
-        # based on jittered values, preventing memorisation of fixed correct answers.
-        # Variants cover 10 of 20 tasks for broad anti-memorisation coverage.
-        for jt in self._tasks:
-            if jt.task_id == "EASY-004":
-                # Base velocity_1h=15 (jittered 12–18).
-                # >= 17: card-clone severity warrants immediate escalation.
-                if (jt.velocity_1h or 0) >= 17:
-                    jt.correct_action = "escalate"
-                    jt.partial_credit_actions = {"flag": 0.5, "hold": 0.4}
 
-            elif jt.task_id == "MED-001":
-                # Base risk_score=0.52, amount=85k (cross-border B2B).
-                # Low jitter: if risk drops below 0.48 AND amount stays modest → approve.
-                if jt.risk_score < 0.48 and jt.amount < 90_000:
-                    jt.correct_action = "approve"
-                    jt.partial_credit_actions = {"escalate": 0.5, "flag": 0.3}
-
-            elif jt.task_id == "MED-003":
-                # Base amount≈450 (jittered 382–540).
-                # >= 500: spike is large enough to hold rather than flag.
-                if jt.amount >= 500.0:
-                    jt.correct_action = "hold"
-                    jt.partial_credit_actions = {"flag": 0.5, "escalate": 0.3}
-
-            elif jt.task_id == "MED-004":
-                # Base risk_score=0.58 (jittered ±0.03).
-                # >= 0.62: risk crosses the senior-review threshold → escalate.
-                if jt.risk_score >= 0.62:
-                    jt.correct_action = "escalate"
-                    jt.partial_credit_actions = {"flag": 0.5, "hold": 0.3}
-
-            elif jt.task_id == "MED-006":
-                # Base risk_score=0.56, amount=120k real-estate advance.
-                # Low jitter: if risk drops below 0.50 and amount < 110k → hold not escalate.
-                if jt.risk_score < 0.50 and jt.amount < 110_000:
-                    jt.correct_action = "hold"
-                    jt.partial_credit_actions = {"flag": 0.4, "escalate": 0.5}
-
-            elif jt.task_id == "HARD-001":
-                # Base risk_score=0.18 (poisoned), counterparty=watchlist.
-                # If velocity_1h jitters up to >= 3: pattern is undeniable → reject not escalate.
-                if (jt.velocity_1h or 0) >= 3:
-                    jt.correct_action = "reject"
-                    jt.partial_credit_actions = {"escalate": 0.5, "flag": 0.4, "hold": 0.3}
-
-            elif jt.task_id == "HARD-006":
-                # Base amount=3200 EUR, risk=0.63 (ghost account / mule reactivation).
-                # High spike: if amount >= 3700 → escalate urgently, not just flag.
-                if jt.amount >= 3_700:
-                    jt.correct_action = "escalate"
-                    jt.partial_credit_actions = {"flag": 0.5, "hold": 0.4}
-
-            elif jt.task_id == "CRIT-001":
-                # Base risk_score=0.59 (PE wire, legit).
-                # If risk jitters above 0.80 → escalate for extra scrutiny before approve.
-                if jt.risk_score >= 0.80:
-                    jt.correct_action = "escalate"
-                    jt.partial_credit_actions = {"flag": 0.4, "hold": 0.35, "approve": 0.3}
-
-            elif jt.task_id == "CRIT-003":
-                # Base amount=680k trade-based ML (escalate).
-                # If amount jitters very high (>= 780k) → reject outright; over-invoicing extreme.
-                if jt.amount >= 780_000:
-                    jt.correct_action = "reject"
-                    jt.partial_credit_actions = {"escalate": 0.5, "flag": 0.3}
-
-            elif jt.task_id == "CRIT-004":
-                # Base risk=0.81, geo-impossible ATO (reject).
-                # If risk jitters below 0.75 → hold pending contact_sender confirmation.
-                if jt.risk_score < 0.75:
-                    jt.correct_action = "hold"
-                    jt.partial_credit_actions = {"escalate": 0.5, "reject": 0.4}
+        # ── Variant pool selection ──────────────────────────────────────────────
+        # Each task in TASK_VARIANTS has 2 alternative scenarios (in addition to
+        # the base).  The episode seed selects which scenario plays out, making
+        # the correct_action unknowable from the task_id alone — the agent MUST
+        # investigate to discover the decisive evidence.
+        #
+        # seed=0 is the canonical episode (all base variants); used by the test
+        # suite so that hardcoded expected rewards remain stable.
+        if episode_seed != 0:
+            for i, jt in enumerate(self._tasks):
+                variants = TASK_VARIANTS.get(jt.task_id, [])
+                if not variants:
+                    continue
+                # variant_idx=0 → base (no changes); 1..N → variants[0..N-1]
+                variant_idx = (episode_seed * 1009 + i * 17) % (len(variants) + 1)
+                if variant_idx == 0:
+                    continue
+                overrides = variants[variant_idx - 1]
+                for key, val in overrides.items():
+                    setattr(jt, key, val)
         self._current_task = self._tasks[0]
         self._used_inv = {}
         self._sar_filed = set()
@@ -196,6 +144,30 @@ class PayOpsEnvironment:
         task = self._current_task
         task_id = task.task_id
         cost = ACTION_COSTS.get(action_type, 0.0)
+
+        # ── MULTI-STEP CHAIN GATE ─────────────────────────────────────────────
+        # Critical tasks with chain_total > 1 require (chain_total − 1)
+        # investigation sub-actions before a terminal decision is accepted.
+        # Blocked attempts return a helpful message without advancing the task.
+        if action_type in TERMINAL_ACTIONS:
+            chain_min = max(0, getattr(task, "chain_total", 1) - 1)
+            inv_done  = len(self._used_inv.get(task_id, set()))
+            if chain_min > 0 and inv_done < chain_min:
+                needed = chain_min - inv_done
+                return self._make_observation(
+                    reward=-0.05,
+                    done=False,
+                    info={
+                        "event":              "chain_gate_blocked",
+                        "chain_status":       "investigation_required",
+                        "chain_steps_needed": needed,
+                        "message": (
+                            f"This {task.difficulty} transaction requires {needed} "
+                            f"more investigation step(s) before a terminal decision. "
+                            f"Please investigate first."
+                        ),
+                    },
+                )
 
         # Deduct cost
         self._state.budget_spent = round(self._state.budget_spent + cost, 4)

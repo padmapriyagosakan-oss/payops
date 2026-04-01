@@ -701,4 +701,407 @@ ACTION_COSTS: Dict[str, float] = {
     "file_sar": 0.05,   # intentionally cheap — incentivise regulatory compliance
 }
 
+# ---------------------------------------------------------------------------
+# Task variant pools — anti-memorisation & investigation-gating
+# ---------------------------------------------------------------------------
+# Each entry is a list of override dicts for alternative scenarios of that task.
+# Variant index 0 always means "use base task" (no overrides applied).
+# Variants 1..N override the fields listed, so the correct_action is only
+# determinable after performing the required investigation sub-actions.
+# The variant is selected deterministically from the episode seed in environment.py.
+#
+# Key design constraint: the BASE observation (pre-investigation) must be
+# genuinely ambiguous — investigation reveals ARE the decisive evidence.
+# ---------------------------------------------------------------------------
+TASK_VARIANTS: Dict[str, List[Dict]] = {
+
+    # ── MEDIUM ────────────────────────────────────────────────────────────
+
+    "MED-003": [
+        # v1: unauthorised recurring billing → hold to freeze
+        {
+            "correct_action": "hold",
+            "partial_credit_actions": {"flag": 0.5, "escalate": 0.3},
+            "inspect_reveal": (
+                "Merchant billing records show 3 prior declined charges this month "
+                "from different cards linked to the same subscriber IP. Pattern is "
+                "consistent with credential stuffing / unauthorised recurring charge. "
+                "Freeze payment and contact customer before releasing."
+            ),
+        },
+        # v2: confirmed annual plan upgrade → approve
+        {
+            "correct_action": "approve",
+            "partial_credit_actions": {"flag": 0.3},
+            "inspect_reveal": (
+                "Customer service log: subscriber upgraded to annual plan via phone "
+                "this morning. $449.97 = 3 × monthly fee (annual discount applied). "
+                "Merchant has confirmed the charge. Safe to approve."
+            ),
+        },
+    ],
+
+    "MED-004": [
+        # v1: structuring pattern across exchanges → escalate
+        {
+            "correct_action": "escalate",
+            "partial_credit_actions": {"flag": 0.5, "hold": 0.3},
+            "inspect_reveal": (
+                "Sender has made 7 crypto exchange payments in 5 days totalling $28k "
+                "across 3 different platforms. Amounts stay just below exchange reporting "
+                "limits. Pattern matches structuring. Escalate for AML review."
+            ),
+        },
+        # v2: clean recurring investment → approve
+        {
+            "correct_action": "approve",
+            "partial_credit_actions": {"flag": 0.3},
+            "inspect_reveal": (
+                "Sender's 3-year payment history shows consistent quarterly crypto "
+                "purchases of similar size. Exchange is fully regulated and KYC-verified. "
+                "Amount within personal investment limits. No structuring indicators. Approve."
+            ),
+        },
+    ],
+
+    "MED-005": [
+        # v1: KYC discrepancy found → escalate
+        {
+            "correct_action": "escalate",
+            "partial_credit_actions": {"flag": 0.5, "hold": 0.3},
+            "kyc_reveal": (
+                "KYC expired because the compliance team found discrepancies between "
+                "the business registration address and Companies House records. The "
+                "case has been flagged for investigation by the KYC team. Escalate — "
+                "do not approve or hold without senior sign-off."
+            ),
+        },
+        # v2: KYC renewed, routine payroll → approve
+        {
+            "correct_action": "approve",
+            "partial_credit_actions": {"hold": 0.4},
+            "kyc_reveal": (
+                "KYC renewal was submitted 10 days ago and completed processing "
+                "yesterday. All checks passed. The lapse was an administrative "
+                "oversight only. Payroll has an 18-month history with no anomalies. "
+                "Approve and process."
+            ),
+        },
+    ],
+
+    "MED-006": [
+        # v1: forged purchase agreement → reject
+        {
+            "correct_action": "reject",
+            "partial_credit_actions": {"escalate": 0.4, "flag": 0.3},
+            "docs_reveal": (
+                "Purchase agreement is a forgery: the notary seal serial number "
+                "does not exist in the notary registry; the property title number "
+                "returns no match in Land Registry; the 'escrow agent' is not "
+                "registered with the Council for Licensed Conveyancers. "
+                "Classic conveyancing fraud — reject immediately."
+            ),
+        },
+        # v2: title dispute — hold pending resolution
+        {
+            "correct_action": "hold",
+            "partial_credit_actions": {"escalate": 0.5, "flag": 0.3},
+            "docs_reveal": (
+                "SPA is authentic and escrow agent is licensed. However, a co-owner "
+                "has filed a title dispute on the property. The buyer's solicitor "
+                "advises funds should be held in escrow until the dispute is resolved "
+                "(expected 3–4 weeks). Hold pending legal clearance."
+            ),
+        },
+    ],
+
+    # ── HARD ──────────────────────────────────────────────────────────────
+
+    "HARD-001": [
+        # v1: deeper forensics confirm active fraud ring → reject
+        {
+            "correct_action": "reject",
+            "partial_credit_actions": {"escalate": 0.5, "flag": 0.3},
+            "inspect_reveal": (
+                "Cross-database query: same receiver account (payee@solicitor-uk.com) "
+                "appeared in 4 prior rejected fraud wires this quarter, total £190k. "
+                "Funds clear to offshore within 45 min each time. ML score was "
+                "deliberately poisoned via clean-account seeding. Reject immediately."
+            ),
+        },
+        # v2: flags are false positives, ML score correct → approve
+        {
+            "correct_action": "approve",
+            "partial_credit_actions": {"escalate": 0.4, "flag": 0.3},
+            "inspect_reveal": (
+                "Manual flag investigation: 'solicitor_mule_pattern' rule mis-fired "
+                "on a legitimate SRA-registered firm (reg. SRA-443210) that rebranded "
+                "last month, causing a new account. 'New_account_7d' flag triggered "
+                "by the rebrand. ALL flags are false positives. ML risk score 0.18 is "
+                "accurate. Safe to approve."
+            ),
+        },
+    ],
+
+    "HARD-002": [
+        # v1: new legitimate supplier, flags were incorrect → approve
+        {
+            "correct_action": "approve",
+            "partial_credit_actions": {"flag": 0.4, "hold": 0.3},
+            "contact_reveal": (
+                "Sender confirmed: mule_relay_2287@fastpay.io is their new supplier "
+                "in Singapore. The VPN flagged by geo-risk monitoring is the company's "
+                "standard corporate security policy. Purchase order #PO-44821 is on "
+                "file matching the amount. Safe to approve."
+            ),
+        },
+        # v2: inconsistent story, AML review needed → escalate
+        {
+            "correct_action": "escalate",
+            "partial_credit_actions": {"reject": 0.4, "flag": 0.3},
+            "contact_reveal": (
+                "Contacted sender: story is vague and inconsistent across two "
+                "follow-up calls. Cannot confirm supplier identity. No purchase order "
+                "provided. The receiver's business registration cannot be located. "
+                "Cannot approve or reject — escalate to AML for investigation."
+            ),
+        },
+    ],
+
+    "HARD-003": [
+        # v1: confirmed structuring but scale needs MLRO → escalate
+        {
+            "correct_action": "escalate",
+            "partial_credit_actions": {"reject": 0.5, "flag": 0.3},
+            "inspect_reveal": (
+                "Pattern strongly resembles CTR structuring. However, the total "
+                "aggregate ($27,750) and the involvement of 3 related entities "
+                "means this crosses the threshold for mandatory MLRO referral under "
+                "internal policy. Escalate rather than unilaterally reject."
+            ),
+        },
+        # v2: same UBO transfers are authorised corporate restructuring → hold
+        {
+            "correct_action": "hold",
+            "partial_credit_actions": {"reject": 0.4, "escalate": 0.5},
+            "inspect_reveal": (
+                "Same-UBO transfers are documented in a board resolution dated last "
+                "week authorising an internal corporate restructuring. KYC failure "
+                "was due to an ID document resubmission still in queue. Structuring "
+                "indicators are coincidental. Hold pending KYC re-verification."
+            ),
+        },
+    ],
+
+    "HARD-004": [
+        # v1: unrecognised SWIFT BIC, potential impersonation → reject
+        {
+            "correct_action": "reject",
+            "partial_credit_actions": {"escalate": 0.5, "flag": 0.3},
+            "inspect_reveal": (
+                "SWIFT BIC vostro@bank-b-swift.com resolved to a bank that does NOT "
+                "appear in the correspondent banking agreement registry. The BIC is "
+                "visually similar to a legitimate bank (one character substituted). "
+                "Likely impersonation of a correspondent partner — reject and alert."
+            ),
+        },
+        # v2: ghost employees detected → flag for payroll audit
+        {
+            "correct_action": "flag",
+            "partial_credit_actions": {"approve": 0.5, "hold": 0.4},
+            "inspect_reveal": (
+                "FX settlement accounts are SWIFT-verified and legitimate. However, "
+                "the initiating staff workflow shows this $4.2M wire was split from "
+                "a larger batch that included 2 non-existent internal accounts. "
+                "Flag for payroll/treasury audit before releasing."
+            ),
+        },
+    ],
+
+    "HARD-005": [
+        # v1: confirmed insider fraud, no response from staff → reject
+        {
+            "correct_action": "reject",
+            "partial_credit_actions": {"escalate": 0.5, "flag": 0.3},
+            "contact_reveal": (
+                "Staff member's phone is disconnected; email bounced. HR confirms "
+                "the employee was placed on garden leave 2 days ago pending "
+                "investigation. Receiver account drained offshore within hours of "
+                "prior similar payments. Insider fraud confirmed — reject and freeze."
+            ),
+        },
+        # v2: authorized vendor payment, staff working late → approve
+        {
+            "correct_action": "approve",
+            "partial_credit_actions": {"escalate": 0.4, "flag": 0.3},
+            "contact_reveal": (
+                "Staff member confirmed: personal Gmail was added as a forwarding "
+                "alias last month when the vendor switched to a personal invoicing "
+                "service. Contract reference VC-2024-189 verified by procurement. "
+                "After-hours initiation matches remote work schedule. Approve."
+            ),
+        },
+    ],
+
+    "HARD-006": [
+        # v1: confirmed active mule network → reject
+        {
+            "correct_action": "reject",
+            "partial_credit_actions": {"escalate": 0.5, "flag": 0.4},
+            "inspect_reveal": (
+                "Receiver account confirmed to be receiving from 12 other dormant "
+                "accounts this week (total €78k). All funds exit to the same offshore "
+                "cluster within 2 hours. Active money-mule aggregation network. "
+                "Reject and file SAR immediately."
+            ),
+        },
+        # v2: estate probate settlement, legitimate size → escalate
+        {
+            "correct_action": "escalate",
+            "partial_credit_actions": {"flag": 0.6, "hold": 0.4},
+            "inspect_reveal": (
+                "Account was frozen under a probate order that was lifted 3 days ago. "
+                "Estate settlement documentation is on file. Amount (€3,200) is "
+                "consistent with a partial distribution from the estate. Legitimate "
+                "reactivation — escalate for senior approval given the reactivation flag."
+            ),
+        },
+    ],
+
+    # ── CRITICAL ──────────────────────────────────────────────────────────
+
+    "CRIT-001": [
+        # v1: deepfake deal, BEC fraud → reject
+        {
+            "correct_action": "reject",
+            "partial_credit_actions": {"escalate": 0.4, "hold": 0.35, "flag": 0.3},
+            "inspect_reveal": (
+                "PE firm name verified but domain is a typo-squatting lookalike "
+                "(pe-flrm.com vs pe-firm.com). No SEC filing exists for this deal. "
+                "The 'press announcement' URL leads to a page created 6 days ago. "
+                "Classic BEC / CEO impersonation fraud."
+            ),
+            "docs_reveal": (
+                "'Signed SPA' is a doctored template — notarization certificate "
+                "serial number LN-2024-00512 does not exist in the notary registry. "
+                "Acquisition is fabricated. Reject and alert security team."
+            ),
+        },
+        # v2: legitimate deal, wrong destination account → hold
+        {
+            "correct_action": "hold",
+            "partial_credit_actions": {"approve": 0.4, "escalate": 0.5},
+            "inspect_reveal": (
+                "PE firm and deal confirmed as genuine (SEC filing #0001234567). "
+                "Press announcement verified with three external sources. Acquisition "
+                "is legitimate. However, the destination account does not match the "
+                "independent escrow account specified in clause 7.3 of the SPA."
+            ),
+            "docs_reveal": (
+                "SPA authenticated by legal team. Per clause 7.3, all milestone "
+                "payments must route to independent escrow account "
+                "escrow@trustco-escrow.com, not directly to the acquisition target. "
+                "Hold and redirect to the correct escrow account."
+            ),
+        },
+    ],
+
+    "CRIT-002": [
+        # v1: same SME, multiple business accounts — coincidental threshold → hold
+        {
+            "correct_action": "hold",
+            "partial_credit_actions": {"reject": 0.5, "escalate": 0.4},
+            "inspect_reveal": (
+                "The 3 flagged accounts all belong to the same registered SME "
+                "(Companies House reg. 09876543) using separate business accounts "
+                "for different cost centres. The $4,900 pattern matches their "
+                "internal expense approval limit — not structuring intent. "
+                "KYC re-verification recommended before releasing. Hold."
+            ),
+        },
+        # v2: ring is larger (9 accounts), MLRO escalation needed → escalate
+        {
+            "correct_action": "escalate",
+            "partial_credit_actions": {"reject": 0.5, "flag": 0.3},
+            "inspect_reveal": (
+                "Network analysis reveals the ring involves 9 accounts total (not 3), "
+                "all created on the same day, all funnelling to the same offshore "
+                "collector. Aggregate total is $42k. Volume and complexity require "
+                "MLRO involvement and a formal SAR — escalate rather than unilaterally reject."
+            ),
+        },
+    ],
+
+    "CRIT-003": [
+        # v1: legitimate specialized goods, market price correct → approve
+        {
+            "correct_action": "approve",
+            "partial_credit_actions": {"escalate": 0.5, "hold": 0.3},
+            "docs_reveal": (
+                "Independent commodity valuation confirms: these are custom precision "
+                "industrial components for semiconductor manufacturing. Verified market "
+                "price: $1,310–1,420 per unit. Invoice price of $1,360 is within "
+                "normal range. No mismatch. Documentation is clean."
+            ),
+            "inspect_reveal": (
+                "Full shipping manifest verified: 500 units dispatched per bill of "
+                "lading BoL-HK-2024-8821. Customs clearance certified in both "
+                "Hong Kong and the destination country. No discrepancies."
+            ),
+        },
+        # v2: criminal-scale TBML, reject immediately
+        {
+            "correct_action": "reject",
+            "partial_credit_actions": {"escalate": 0.5, "flag": 0.3},
+            "docs_reveal": (
+                "Invoice declares 500 units @ $1,360 = $680k. Independent valuation: "
+                "market price is $250/unit. Over-invoiced by 5.4×. Matches a "
+                "trade-based money laundering typology filed with FATF last year. "
+                "Criminal-level TBML — reject and file SAR immediately."
+            ),
+            "inspect_reveal": (
+                "Shipping records show only 100 units dispatched vs 500 invoiced. "
+                "Invoice-to-goods ratio 5.4× above market. Direct evidence of false "
+                "customs declarations. Reject immediately."
+            ),
+        },
+    ],
+
+    "CRIT-004": [
+        # v1: CEO delegated to CFO who was in Lagos — hold for confirmation
+        {
+            "correct_action": "hold",
+            "partial_credit_actions": {"escalate": 0.5, "reject": 0.4},
+            "inspect_reveal": (
+                "Geo-impossible login flagged. However, a delegation email from the "
+                "CEO was sent 2 hours ago via their verified corporate account granting "
+                "the CFO emergency signing authority for this exact transfer. "
+                "CFO was in Lagos for a board meeting (flight records available). "
+            ),
+            "contact_reveal": (
+                "CEO confirmed via secure callback: CFO had full authority to initiate "
+                "this transfer. Delegation is documented in the board minutes. "
+                "Hold briefly to verify the papertrail, then release."
+            ),
+        },
+        # v2: CEO unreachable, dual-approval controls met, escalate
+        {
+            "correct_action": "escalate",
+            "partial_credit_actions": {"reject": 0.5, "hold": 0.4},
+            "inspect_reveal": (
+                "Account takeover strongly suspected. CEO's registered number is "
+                "unreachable (OOO message). However, the transfer went through the "
+                "standard dual-approval workflow with two internal approvers (both "
+                "records look genuine). Outcome ambiguous — escalate to Fraud "
+                "Operations for emergency investigation."
+            ),
+            "contact_reveal": (
+                "Cannot reach CEO. Deputy CFO states they approved the transfer but "
+                "cannot confirm whether the CEO or an impersonator initiated it. "
+                "Escalate immediately to Fraud Ops and place a temporary hold."
+            ),
+        },
+    ],
+}
+
 
