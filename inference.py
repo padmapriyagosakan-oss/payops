@@ -70,6 +70,30 @@ VALID_ACTIONS = {
     "inspect", "request_docs", "verify_kyc", "contact_sender", "file_sar",
 }
 
+# ── Contest-spec structured logging ──────────────────────────────────────────
+# Exactly three line types to stdout (machine-parseable by the evaluator):
+#   [START]  once per episode
+#   [STEP]   once per env.step() call
+#   [END]    always, even on exception
+
+TASK_NAME = os.environ.get("PAYOPS_TASK", "payops")
+ENV_NAME  = "payops_env"
+
+
+def log_start(task: str, env: str, model: str) -> None:
+    print(f"[START] task={task} env={env} model={model}", flush=True)
+
+
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
+    error_val = error if error else "null"
+    done_val  = str(done).lower()
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}", flush=True)
+
+
+def log_end(success: bool, steps: int, score: float, rewards: list) -> None:
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+
 SYSTEM_PROMPT = """You are a Payment Operations analyst reviewing financial transactions.
 
 For each transaction you will receive structured data including:
@@ -187,10 +211,10 @@ def call_llm(client: OpenAI, observation_text: str) -> str:
     return action
 
 
-def run_inference() -> dict:
+def run_inference() -> tuple:
     """
     Run one full episode of PayOps with the LLM agent.
-    Returns the grader result dict.
+    Returns (grader_result_dict, per_step_rewards, total_steps).
     """
     # ── validate env vars ───────────────────────────────────────────────
     # OPENAI_API_KEY or HF_TOKEN must be set (either is acceptable)
@@ -202,11 +226,11 @@ def run_inference() -> dict:
         print(f"ERROR: Missing required environment variables: {', '.join(missing)}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"PayOps Inference")
-    print(f"  Model      : {MODEL_NAME}")
-    print(f"  API Base   : {API_BASE_URL}")
-    print(f"  Server     : {PAYOPS_URL}")
-    print()
+    print(f"PayOps Inference", file=sys.stderr)
+    print(f"  Model      : {MODEL_NAME}", file=sys.stderr)
+    print(f"  API Base   : {API_BASE_URL}", file=sys.stderr)
+    print(f"  Server     : {PAYOPS_URL}", file=sys.stderr)
+    print(file=sys.stderr)
 
     # ── init OpenAI client ──────────────────────────────────────────────
     client = OpenAI(
@@ -217,7 +241,7 @@ def run_inference() -> dict:
     # ── health check ────────────────────────────────────────────────────
     try:
         health = _make_request(f"{PAYOPS_URL}/health")
-        print(f"Server health : {health.get('status')} (v{health.get('version', '?')})")
+        print(f"Server health : {health.get('status')} (v{health.get('version', '?')})", file=sys.stderr)
     except Exception as e:
         print(f"ERROR: Cannot reach PayOps server at {PAYOPS_URL}: {e}", file=sys.stderr)
         sys.exit(1)
@@ -227,14 +251,15 @@ def run_inference() -> dict:
     reset_body: dict = {}
     if INFERENCE_SEED is not None:
         reset_body["seed"] = INFERENCE_SEED
-        print(f"Episode seed  : {INFERENCE_SEED} (set INFERENCE_SEED=random for a fresh run)")
+        print(f"Episode seed  : {INFERENCE_SEED} (set INFERENCE_SEED=random for a fresh run)", file=sys.stderr)
     _reset_resp = _make_request(f"{PAYOPS_URL}/reset", method="POST", body=reset_body or None)
     # Support official wrapped format {"observation":{...},"reward":...} and legacy flat format
     obs = _unwrap_response(_reset_resp)
-    print(f"Episode start : task={obs['task_id']}, budget={obs['budget_remaining']}")
-    print()
+    print(f"Episode start : task={obs['task_id']}, budget={obs['budget_remaining']}", file=sys.stderr)
+    print(file=sys.stderr)
 
     step_count = 0
+    rewards_list: list = []
     start_time = time.time()
     # Hard caps to guarantee <20 min runtime on any inference endpoint.
     # Worst case: 55 steps × 15 s/call ≈ 825 s (~14 min); well inside the 20 min limit.
@@ -254,18 +279,18 @@ def run_inference() -> dict:
         try:
             action = call_llm(client, obs_text)
         except Exception as e:
-            print(f"  LLM error on {task_id}: {e} — defaulting to 'flag'")
+            print(f"  LLM error on {task_id}: {e} — defaulting to 'flag'", file=sys.stderr)
             action = "flag"
 
         # Validate action
         if action not in VALID_ACTIONS:
-            print(f"  ⚠ LLM returned invalid action '{action}' → defaulting to 'flag'")
+            print(f"  ⚠ LLM returned invalid action '{action}' → defaulting to 'flag'", file=sys.stderr)
             action = "flag"
 
         # Budget guard: if budget is low, skip expensive investigation actions
         expensive = {"contact_sender": 0.3, "request_docs": 0.2, "verify_kyc": 0.2}
         if action in expensive and budget < expensive[action] + 0.1:
-            print(f"  ⚠ Insufficient budget ({budget:.2f}) for '{action}' → using 'inspect'")
+            print(f"  ⚠ Insufficient budget ({budget:.2f}) for '{action}' → using 'inspect'", file=sys.stderr)
             action = "inspect" if budget >= 0.1 else "flag"
 
         # Loop guard: if model keeps investigating without deciding, force a terminal action
@@ -274,7 +299,7 @@ def run_inference() -> dict:
         if action in INVESTIGATION_ACTIONS:
             inv_counts[task_id] = inv_counts.get(task_id, 0) + 1
             if inv_counts[task_id] > MAX_INV_PER_TASK:
-                print(f"  ⚠ Investigation loop on {task_id} ({inv_counts[task_id]} sub-actions) → forcing 'flag'")
+                print(f"  ⚠ Investigation loop on {task_id} ({inv_counts[task_id]} sub-actions) → forcing 'flag'", file=sys.stderr)
                 action = "flag"
         else:
             # Reset counter on terminal action (task will advance)
@@ -293,16 +318,19 @@ def run_inference() -> dict:
 
         # Unwrap official {"observation":{...},"reward":...} or legacy flat format
         obs = _unwrap_response(_step_resp)
-        reward   = obs.get("reward", 0)
-        new_task = obs.get("task_id", "?")
+        reward    = obs.get("reward", 0)
+        new_task  = obs.get("task_id", "?")
+        done_flag = obs.get("done", False)
         step_count += 1
+        rewards_list.append(reward)
+        log_step(step=step_count, action=action, reward=reward, done=done_flag, error=None)
 
         marker = "✓" if reward > 0 else ("✗" if reward < 0 else "·")
         print(f"  [{marker}] {task_id:12s} → {action:15s}  reward={reward:+.3f}  "
-              f"budget={obs.get('budget_remaining', 0):.2f}")
+              f"budget={obs.get('budget_remaining', 0):.2f}", file=sys.stderr)
 
     elapsed = time.time() - start_time
-    print(f"\nEpisode complete: {step_count} steps in {elapsed:.1f}s")
+    print(f"\nEpisode complete: {step_count} steps in {elapsed:.1f}s", file=sys.stderr)
 
     # ── grade ────────────────────────────────────────────────────────────
     try:
@@ -315,38 +343,49 @@ def run_inference() -> dict:
     passed  = grader.get("passed", False)
     budgets = grader.get("budget_spent", 0)
 
-    print(f"\n{'='*50}")
-    print(f"  Normalised Score : {score:.4f}")
-    print(f"  Total Reward     : {grader.get('total_reward', 0):.3f}")
-    print(f"  Max Possible     : {grader.get('max_possible_reward', 0):.3f}")
-    print(f"  Budget Spent     : {budgets:.2f}")
-    print(f"  Budget Penalty   : {grader.get('budget_penalty', 0):.3f}")
-    print(f"  Passed           : {'YES ✓' if passed else 'NO ✗'}")
-    print(f"{'='*50}")
+    print(f"\n{'='*50}", file=sys.stderr)
+    print(f"  Normalised Score : {score:.4f}", file=sys.stderr)
+    print(f"  Total Reward     : {grader.get('total_reward', 0):.3f}", file=sys.stderr)
+    print(f"  Max Possible     : {grader.get('max_possible_reward', 0):.3f}", file=sys.stderr)
+    print(f"  Budget Spent     : {budgets:.2f}", file=sys.stderr)
+    print(f"  Budget Penalty   : {grader.get('budget_penalty', 0):.3f}", file=sys.stderr)
+    print(f"  Passed           : {'YES ✓' if passed else 'NO ✗'}", file=sys.stderr)
+    print(f"{'='*50}", file=sys.stderr)
 
     # Per-task breakdown
     per_task = grader.get("per_task", [])
     correct_count = sum(1 for t in per_task if t.get("correct", False))
     wrong_count   = len(per_task) - correct_count
 
-    print("\nPer-task breakdown:")
-    print(f"  {'Task':12s} {'Difficulty':10s} {'Agent Action':15s} {'Correct Action':15s} {'Reward':>8s}")
-    print(f"  {'-'*65}")
+    print("\nPer-task breakdown:", file=sys.stderr)
+    print(f"  {'Task':12s} {'Difficulty':10s} {'Agent Action':15s} {'Correct Action':15s} {'Reward':>8s}", file=sys.stderr)
+    print(f"  {'-'*65}", file=sys.stderr)
     for t in per_task:
         ok  = t.get("correct", False)
         sym = "✓" if ok else "✗"
         print(f"  [{sym}] {t.get('task_id','?'):12s} {t.get('difficulty','?'):10s} "
               f"{t.get('terminal_action','?'):15s} {t.get('correct_action','?'):15s} "
-              f"{t.get('weighted_reward', 0):+8.3f}")
+              f"{t.get('weighted_reward', 0):+8.3f}", file=sys.stderr)
 
     print(f"\n  Tasks correct : {correct_count}/{len(per_task)}  "
           f"({100*correct_count/len(per_task):.0f}%)  "
-          f"Wrong: {wrong_count}")
+          f"Wrong: {wrong_count}", file=sys.stderr)
 
-    return grader
+    return grader, rewards_list, step_count
 
 
 if __name__ == "__main__":
-    result = run_inference()
-    # Exit non-zero if the agent didn't pass
-    sys.exit(0 if result.get("passed", False) else 1)
+    _rewards: list = []
+    _steps   = 0
+    _score   = 0.0
+    _success = False
+    try:
+        log_start(task=TASK_NAME, env=ENV_NAME, model=MODEL_NAME)
+        result, _rewards, _steps = run_inference()
+        _score   = result.get("normalised_score", 0.0)
+        _success = result.get("passed", False)
+    except Exception as exc:
+        print(f"[DEBUG] Fatal: {exc}", file=sys.stderr)
+    finally:
+        log_end(success=_success, steps=_steps, score=_score, rewards=_rewards)
+    sys.exit(0 if _success else 1)
