@@ -97,9 +97,9 @@ section "GROUP B — Tasks endpoint"
 
 TASKS_RESP="$(curl -s $BASE/tasks)"
 
-# B-01  20 tasks
-check "B-01  GET /tasks → count=20" \
-  "$TASKS_RESP" '"count":20'
+# B-01  30 tasks
+check "B-01  GET /tasks → count=30" \
+  "$TASKS_RESP" '"count":30'
 
 # B-02  All 4 difficulty tiers present
 check "B-02  Tasks include 'easy' tier" "$TASKS_RESP" '"difficulty":"easy"'
@@ -159,6 +159,16 @@ check "D-04  EASY-004 flag → reward=1.0" \
   "$(step '{"action_type":"flag","transaction_id":"TXN-E004"}')" \
   '"reward":1.0'
 
+# D-04b  approve correct (mortgage repayment) → reward=1.0
+check "D-04b  EASY-005 approve → reward=1.0" \
+  "$(step '{"action_type":"approve","transaction_id":"TXN-E005"}')" \
+  '"reward":1.0'
+
+# D-04c  flag correct (duplicate payment) → reward=1.0
+check "D-04c  EASY-006 flag → reward=1.0" \
+  "$(step '{"action_type":"flag","transaction_id":"TXN-E006"}')" \
+  '"reward":1.0'
+
 # D-05  escalate correct → reward=1.0
 check "D-05  MED-001 escalate → reward=1.0" \
   "$(step '{"action_type":"escalate","transaction_id":"TXN-M001"}')" \
@@ -202,6 +212,8 @@ step '{"action_type":"approve","transaction_id":"TXN-E001"}' > /dev/null
 step '{"action_type":"reject","transaction_id":"TXN-E002"}' > /dev/null
 step '{"action_type":"approve","transaction_id":"TXN-E003"}' > /dev/null
 step '{"action_type":"flag","transaction_id":"TXN-E004"}' > /dev/null
+step '{"action_type":"approve","transaction_id":"TXN-E005"}' > /dev/null
+step '{"action_type":"flag","transaction_id":"TXN-E006"}' > /dev/null
 R=$(step '{"action_type":"flag","transaction_id":"TXN-M001"}')
 check "E-03  Partial credit: flag on MED-001 (correct=escalate) → reward > 0" \
   "$R" '"reward":0\.[0-9]'
@@ -295,11 +307,18 @@ check "H-07  GET /grader → passed field present" "$GRADER" '"passed":'
 # ═══════════════════════════════════════════════════════════
 section "GROUP I — /replay endpoint (offline eval)"
 
-# I-01  Replay with all correct actions → score=1.0
-REPLAY_PERFECT='{"actions":["approve","reject","approve","flag",
-  "escalate","hold","flag","flag","hold","escalate",
-  "escalate","reject","reject","approve","escalate","flag",
-  "approve","reject","escalate","reject"]}'
+# I-01  Replay with all 30 correct terminal actions (no investigation)
+#        Hard/critical tasks should be penalised (×0.80) → 0.7–0.9 range
+# Task order: EASY×6, MED×8, HARD×10, CRIT×6
+# Correct actions:
+#   EASY: approve reject approve flag approve flag
+#   MED:  escalate hold flag flag hold escalate hold flag
+#   HARD: escalate reject reject approve escalate flag reject reject escalate reject
+#   CRIT: approve reject escalate reject reject escalate
+REPLAY_PERFECT='{"actions":["approve","reject","approve","flag","approve","flag",
+  "escalate","hold","flag","flag","hold","escalate","hold","flag",
+  "escalate","reject","reject","approve","escalate","flag","reject","reject","escalate","reject",
+  "approve","reject","escalate","reject","reject","escalate"]}'
 R=$(curl -s -X POST $BASE/replay \
     -H "Content-Type: application/json" \
     -d "$REPLAY_PERFECT")
@@ -307,11 +326,11 @@ check "I-01  Replay correct terminals (no investigation) → score<1.0 (hard/cri
 check "I-02  Replay → passed=true (score>0.5 despite penalty)" "$R" '"passed":true'
 check "I-03  Replay → budget_spent=0.0 (no inv actions)" "$R" '"budget_spent":0.0'
 
-# I-04  Replay with investigation actions included
-REPLAY_WITH_INV='{"actions":["inspect","approve","reject","approve","flag",
-  "escalate","hold","flag","flag","hold","escalate",
-  "escalate","reject","reject","approve","escalate","flag",
-  "approve","reject","escalate","reject"]}'
+# I-04  Replay with investigation actions included (inspect before first task)
+REPLAY_WITH_INV='{"actions":["inspect","approve","reject","approve","flag","approve","flag",
+  "escalate","hold","flag","flag","hold","escalate","hold","flag",
+  "escalate","reject","reject","approve","escalate","flag","reject","reject","escalate","reject",
+  "approve","reject","escalate","reject","reject","escalate"]}'
 R=$(curl -s -X POST $BASE/replay \
     -H "Content-Type: application/json" \
     -d "$REPLAY_WITH_INV")
@@ -370,16 +389,33 @@ def get(path):
     with urllib.request.urlopen(f"{BASE}{path}", context=_ssl) as r: return json.loads(r.read())
 
 post("/reset", {"seed": 0})
-actions = [
+# EASY x6 + MED x8 + HARD x10: no chain gate, terminal only
+for action, txn in [
   ("approve","TXN-E001"),("reject","TXN-E002"),("approve","TXN-E003"),("flag","TXN-E004"),
+  ("approve","TXN-E005"),("flag","TXN-E006"),
   ("escalate","TXN-M001"),("hold","TXN-M002"),("flag","TXN-M003"),("flag","TXN-M004"),
-  ("hold","TXN-M005"),("escalate","TXN-M006"),
+  ("hold","TXN-M005"),("escalate","TXN-M006"),("hold","TXN-M007"),("flag","TXN-M008"),
   ("escalate","TXN-H001"),("reject","TXN-H002"),("reject","TXN-H003"),("approve","TXN-H004"),
-  ("escalate","TXN-H005"),("flag","TXN-H006"),
-  ("approve","TXN-C001"),("reject","TXN-C002"),("escalate","TXN-C003"),("reject","TXN-C004"),
-]
-for action, txn in actions:
+  ("escalate","TXN-H005"),("flag","TXN-H006"),("reject","TXN-H007"),("reject","TXN-H008"),
+  ("escalate","TXN-H009"),("reject","TXN-H010"),
+]:
     post("/step", {"action_type": action, "transaction_id": txn})
+# CRIT x6: chain-gated — must provide chain_min investigation steps first
+post("/step", {"action_type": "inspect",       "transaction_id": "TXN-C001"})
+post("/step", {"action_type": "request_docs",  "transaction_id": "TXN-C001"})
+post("/step", {"action_type": "approve",       "transaction_id": "TXN-C001"})
+post("/step", {"action_type": "inspect",       "transaction_id": "TXN-C002"})
+post("/step", {"action_type": "reject",        "transaction_id": "TXN-C002"})
+post("/step", {"action_type": "request_docs",  "transaction_id": "TXN-C003"})
+post("/step", {"action_type": "inspect",       "transaction_id": "TXN-C003"})
+post("/step", {"action_type": "escalate",      "transaction_id": "TXN-C003"})
+post("/step", {"action_type": "inspect",       "transaction_id": "TXN-C004"})
+post("/step", {"action_type": "reject",        "transaction_id": "TXN-C004"})
+post("/step", {"action_type": "inspect",       "transaction_id": "TXN-C005"})
+post("/step", {"action_type": "verify_kyc",    "transaction_id": "TXN-C005"})
+post("/step", {"action_type": "reject",        "transaction_id": "TXN-C005"})
+post("/step", {"action_type": "inspect",       "transaction_id": "TXN-C006"})
+post("/step", {"action_type": "escalate",      "transaction_id": "TXN-C006"})
 PYEOF
 
 ANA="$(curl -s $BASE/analytics)"
@@ -408,7 +444,7 @@ check "L-06  GET /leaderboard → budget_spent in entry" "$LB" '"budget_spent":'
 # ═══════════════════════════════════════════════════════════
 # GROUP M — Perfect episode score
 # ═══════════════════════════════════════════════════════════
-section "GROUP M — Perfect episode (all 20 correct + investigation on hard/critical)"
+section "GROUP M — Perfect episode (all 30 correct + investigation on hard/critical)"
 
 reset
 BASE=$BASE python3 - <<'PYEOF'
@@ -424,14 +460,15 @@ def post(path, body=None):
     with urllib.request.urlopen(req, context=_ssl) as r: return json.loads(r.read())
 
 post("/reset", {"seed": 0})
-# Easy + medium: terminal only
+# Easy x6 + Medium x8: terminal only
 for action, txn in [
   ("approve","TXN-E001"),("reject","TXN-E002"),("approve","TXN-E003"),("flag","TXN-E004"),
+  ("approve","TXN-E005"),("flag","TXN-E006"),
   ("escalate","TXN-M001"),("hold","TXN-M002"),("flag","TXN-M003"),("flag","TXN-M004"),
-  ("hold","TXN-M005"),("escalate","TXN-M006"),
+  ("hold","TXN-M005"),("escalate","TXN-M006"),("hold","TXN-M007"),("flag","TXN-M008"),
 ]:
     post("/step", {"action_type": action, "transaction_id": txn})
-# Hard tasks: one required investigation sub-action before each terminal
+# Hard x10: one required investigation sub-action before each terminal
 post("/step", {"action_type": "inspect",         "transaction_id": "TXN-H001"})
 post("/step", {"action_type": "escalate",        "transaction_id": "TXN-H001"})
 post("/step", {"action_type": "contact_sender",  "transaction_id": "TXN-H002"})
@@ -445,7 +482,15 @@ post("/step", {"action_type": "contact_sender",  "transaction_id": "TXN-H005"})
 post("/step", {"action_type": "escalate",        "transaction_id": "TXN-H005"})
 post("/step", {"action_type": "inspect",         "transaction_id": "TXN-H006"})
 post("/step", {"action_type": "flag",            "transaction_id": "TXN-H006"})
-# Critical tasks: required investigation sub-actions before each terminal
+post("/step", {"action_type": "contact_sender",  "transaction_id": "TXN-H007"})
+post("/step", {"action_type": "reject",          "transaction_id": "TXN-H007"})
+post("/step", {"action_type": "contact_sender",  "transaction_id": "TXN-H008"})
+post("/step", {"action_type": "reject",          "transaction_id": "TXN-H008"})
+post("/step", {"action_type": "verify_kyc",      "transaction_id": "TXN-H009"})
+post("/step", {"action_type": "escalate",        "transaction_id": "TXN-H009"})
+post("/step", {"action_type": "contact_sender",  "transaction_id": "TXN-H010"})
+post("/step", {"action_type": "reject",          "transaction_id": "TXN-H010"})
+# Critical x6: required investigation sub-actions before each terminal
 post("/step", {"action_type": "inspect",         "transaction_id": "TXN-C001"})
 post("/step", {"action_type": "request_docs",    "transaction_id": "TXN-C001"})
 post("/step", {"action_type": "approve",         "transaction_id": "TXN-C001"})
@@ -457,6 +502,11 @@ post("/step", {"action_type": "escalate",        "transaction_id": "TXN-C003"})
 post("/step", {"action_type": "inspect",         "transaction_id": "TXN-C004"})
 post("/step", {"action_type": "contact_sender",  "transaction_id": "TXN-C004"})
 post("/step", {"action_type": "reject",          "transaction_id": "TXN-C004"})
+post("/step", {"action_type": "inspect",         "transaction_id": "TXN-C005"})
+post("/step", {"action_type": "verify_kyc",      "transaction_id": "TXN-C005"})
+post("/step", {"action_type": "reject",          "transaction_id": "TXN-C005"})
+post("/step", {"action_type": "request_docs",    "transaction_id": "TXN-C006"})
+post("/step", {"action_type": "escalate",        "transaction_id": "TXN-C006"})
 PYEOF
 
 GRADER="$(curl -s $BASE/grader)"
@@ -470,16 +520,16 @@ check "M-03  Perfect episode → budget_penalty=0.0" "$GRADER" '"budget_penalty"
 section "GROUP N — Difficulty weighting in grader"
 
 # A critical task correct should contribute more weight than easy
-REPLAY_CRIT='{"actions":["approve","reject","approve","flag",
-  "escalate","hold","flag","flag","hold","escalate",
-  "escalate","reject","reject","approve","escalate","flag",
-  "approve","reject","escalate","reject"]}'
+REPLAY_CRIT='{"actions":["approve","reject","approve","flag","approve","flag",
+  "escalate","hold","flag","flag","hold","escalate","hold","flag",
+  "escalate","reject","reject","approve","escalate","flag","reject","reject","escalate","reject",
+  "approve","reject","escalate","reject","reject","escalate"]}'
 
 FULL=$(curl -s -X POST $BASE/replay \
     -H "Content-Type: application/json" \
     -d "$REPLAY_CRIT")
 check "N-01  Full correct replay → max_possible_reward includes weights" \
-  "$FULL" '"max_possible_reward":2[0-9]\.'
+  "$FULL" '"max_possible_reward":4[0-9]\.'
 check "N-02  Correct-but-no-investigation → total_reward below max (penalty applied)" \
   "$(echo "$FULL" | python3 -c "
 import sys,json,re

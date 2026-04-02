@@ -77,6 +77,15 @@ def _should_investigate(obs) -> Optional[str]:
     if (ml_conf < 0.60 or watchlist_hit) and "inspect" not in already:
         return "inspect"
 
+    # Fallback for chain-gated tasks (chain_total > 1): if not enough investigation
+    # steps have been done yet, issue generic actions in priority order so the
+    # baseline agent never gets stuck in an infinite chain-gate loop.
+    chain_min = max(0, getattr(obs, "chain_total", 1) - 1)
+    if chain_min > 0 and len(already) < chain_min:
+        for inv_action in ("inspect", "verify_kyc", "request_docs", "contact_sender", "file_sar"):
+            if inv_action not in already:
+                return inv_action
+
     return None
 
 

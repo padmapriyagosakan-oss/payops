@@ -114,7 +114,7 @@ observation_space:
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 tasks:
-  count: 20
+  count: 30
   difficulties:
     - easy
     - medium

@@ -150,7 +150,7 @@ def check_openenv_yaml():
         ("API_BASE_URL",    "API_BASE_URL env var declared"),
         ("MODEL_NAME",      "MODEL_NAME env var declared"),
         ("HF_TOKEN",        "HF_TOKEN env var declared"),
-        ("count: 20",       "tasks count=20"),
+        ("count: 30",       "tasks count=30"),
         ("inference.py",    "inference script reference"),
         ("approve",         "approve action"),
         ("reject",          "reject action"),

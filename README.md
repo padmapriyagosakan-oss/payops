@@ -35,7 +35,7 @@ Authorised Push Payment (APP) scams.
 
 ## Environment Description
 
-Each **episode** steps through all **20 transactions** (4 easy, 6 medium, 6 hard, 4 critical).
+Each **episode** steps through all **30 transactions** (6 easy, 8 medium, 10 hard, 6 critical).
 For each transaction the agent observes a rich set of signals and chooses one
 of **10 possible actions** — 5 terminal decisions and 5 investigation sub-actions.
 A reward is returned immediately, and the next transaction is presented until
@@ -121,8 +121,10 @@ Investigation sub-actions (with budget cost) reveal more information and let the
 | EASY-002 | Textbook fraud: unknown sender, offshore, sanctioned country, risk=0.97 | `reject` |
 | EASY-003 | Standard refund to verified customer; tiny amount, no flags | `approve` |
 | EASY-004 | ATM withdrawal burst — 15 withdrawals in 58 minutes | `flag` |
+| EASY-005 | Scheduled monthly mortgage repayment; regular amount, verified borrower | `approve` |
+| EASY-006 | Suspected duplicate payment: same sender/receiver/amount submitted twice in 4 minutes | `flag` |
 
-### Medium (6 tasks — ambiguous, multi-signal reasoning required)
+### Medium (8 tasks — ambiguous, multi-signal reasoning required)
 
 | ID       | Description | Correct Action |
 |---------|-------------|----------------|
@@ -132,8 +134,10 @@ Investigation sub-actions (with budget cost) reveal more information and let the
 | MED-004 | Payment to licensed crypto exchange from verified personal account | `flag` |
 | MED-005 | Expired KYC on high-frequency corporate payroll account; KYC lapsed 12 days ago | `hold` |
 | MED-006 | Real estate advance payment; large first-time transfer to new receiver but signed contract exists | `escalate` |
+| MED-007 | Supplier emails to say bank details have changed; first payment to new account matches large invoice (BEC indicator) | `hold` |
+| MED-008 | Buy Now Pay Later high-value purchase; new account, thin credit file, elevated risk signals | `flag` |
 
-### Hard (6 tasks — adversarial / edge-case)
+### Hard (10 tasks — adversarial / edge-case)
 
 | ID        | Description | Correct Action |
 |----------|-------------|----------------|
@@ -142,16 +146,22 @@ Investigation sub-actions (with budget cost) reveal more information and let the
 | HARD-003 | Structuring / smurfing: just-below-CTR-threshold payments, same UBO | `reject` |
 | HARD-004 | Legitimate FX correspondent banking settlement — looks alarming, is not | `approve` |
 | HARD-005 | Insider threat: employee initiating transfers to personal family accounts | `escalate` |
-| HARD-006 | Ghost account: dormant 5 years, suddenly received 20 inbound transfers this week — possible account takeover | `flag` |
+| HARD-006 | Ghost account: dormant 5 years, suddenly received 20 inbound transfers this week | `flag` |
+| HARD-007 | SIM-swap attack: phone ported 6 hours ago; account now requesting large crypto withdrawal to new address | `reject` |
+| HARD-008 | Romance scam / pig butchering: 4th escalating transfer to overseas 'romantic partner' met online | `reject` |
+| HARD-009 | Synthetic identity fraud: new business account with AI-generated-looking perfect profile | `escalate` |
+| HARD-010 | Payroll diversion: HR system breach rerouted employee salary to newly added account | `reject` |
 
-### Critical (4 tasks — regulatory + multi-step investigation chains)
+### Critical (6 tasks — regulatory + multi-step investigation chains)
 
 | ID        | Description | Correct Action |
 |----------|-------------|----------------|
-| CRIT-001 | Multi-step chain: large wire to new counterparty; agent must inspect then request docs before deciding (chain of 3) | `approve` |
+| CRIT-001 | Multi-step chain: large PE wire to new counterparty; inspect then request docs before deciding (chain of 3) | `approve` |
 | CRIT-002 | Fraud ring: coordinated small payments from 3 related accounts aggregating above reporting threshold; SAR required | `reject` |
-| CRIT-003 | Trade-based money laundering: over-invoiced international trade payment (4× market price); regulatory escalation required | `escalate` |
+| CRIT-003 | Trade-based money laundering: over-invoiced international trade payment (4× market price) | `escalate` |
 | CRIT-004 | Compromised corporate account: geo-impossible login (NY → Lagos in 8 min); confirmed account takeover | `reject` |
+| CRIT-005 | OFAC sanctions evasion: large USD payment routed through UAE shell chain; UBO is on SDN list (chain of 3) | `reject` |
+| CRIT-006 | Correspondent banking: partner bank added to FinCEN 311 Special Measures list; in-flight payments must be escalated | `escalate` |
 
 ---
 
@@ -265,7 +275,7 @@ print(f"Episode score: {score['normalised_score']:.4f}")
 
 The rule-based baseline uses a deterministic priority-ordered policy in `scripts_util.py`.
 
-| Metric | Rule-based baseline (v2, 20 tasks) |
+| Metric | Rule-based baseline (v2, 30 tasks) |
 |--------|------------------------------------|
 | Normalised score | 0.68–0.76 |
 | Passed (≥ 0.5) | Yes |
@@ -410,7 +420,7 @@ PYTHONPATH=$(pwd) python payops_env/inference.py
 payops_env/
 ├── models.py              # PayOpsAction, PayOpsObservation, PayOpsState (Pydantic)
 ├── environment.py         # PayOpsEnvironment — reset_async / step_async / state
-├── tasks.py               # 20 tasks (EASY×4, MED×6, HARD×6, CRIT×4) with ground-truth labels
+├── tasks.py               # 30 tasks (EASY×6, MED×8, HARD×10, CRIT×6) with ground-truth labels
 ├── grader.py              # Partial-credit reward function + episode grader
 ├── scripts_util.py        # Baseline runner helper (used by /baseline endpoint)
 ├── server/
@@ -430,7 +440,7 @@ payops_env/
 | Criterion | Implementation |
 |-----------|---------------|
 | Real-world utility | Payment fraud and compliance triage — deployed daily by fintech ops teams worldwide |
-| Task & grader quality | 20 tasks across 4 difficulty tiers (easy→critical); partial-credit grader; clear pass/fail |
+| Task & grader quality | 30 tasks across 4 difficulty tiers (easy→critical); partial-credit grader; clear pass/fail |
 | Environment design | 30-field observation space; 10-action space (5 terminal + 5 investigation); budget mechanic; episode state tracking |
 | Code quality & spec compliance | Pydantic v2 models; async API; all 11 required endpoints; openenv.yaml v2; Dockerfile; validate.py |
 | Creativity & novelty | Adversarial model-poisoning task; APP scam; AML structuring with SAR requirement; PEP detection |
