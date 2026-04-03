@@ -1,12 +1,12 @@
 """
-Task bank for the PayOps environment — 20 tasks across 4 difficulty tiers.
+Task bank for the PayOps environment — 30 tasks across 4 difficulty tiers.
 
 Difficulty tiers
 ----------------
-  easy      – single clear signal; one-hop decision
-  medium    – ambiguous or competing signals; reasoning required
-  hard      – adversarial, conflicting, or edge-case patterns
-  critical  – multi-step investigation chains; regulatory compliance stakes
+  easy      – single clear signal; one-hop decision           (6 tasks)
+  medium    – ambiguous or competing signals; reasoning required (8 tasks)
+  hard      – adversarial, conflicting, or edge-case patterns (10 tasks)
+  critical  – multi-step investigation chains; regulatory compliance stakes (6 tasks)
 
 Multi-step chains
 -----------------
