@@ -27,11 +27,11 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from payops_env.environment import PayOpsEnvironment, VALID_ACTIONS
 from payops_env.grader import grade_episode
-from payops_env.models import PayOpsAction, PayOpsObservation, PayOpsState
+from payops_env.models import PayOpsAction, PayOpsObservation, PayOpsState, PayOpsReward
 from payops_env.tasks import TASKS, TASKS_BY_ID
 
 
@@ -48,25 +48,80 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# Single shared environment instance (suitable for single-user / HF Space use)
-_env = PayOpsEnvironment()
-_episode_actions: List[str] = []          # ALL actions including investigation
-_episode_confs: List[Optional[float]] = []
-_episode_tasks: List[Any] = []
+# Per-session environment instances — one per /reset call.
+# Keyed by episode_id; keeps the last _MAX_SESSIONS sessions to bound memory.
+_MAX_SESSIONS = 20
+_sessions: Dict[str, Dict[str, Any]] = {}
+_current_session_id: Optional[str] = None
+_state_lock = asyncio.Lock()   # serialises all state-mutating handlers
 
 # Leaderboard persists for the process lifetime
 _leaderboard: List[Dict[str, Any]] = []
+
+
+def _current_session() -> Dict[str, Any]:
+    """Return the session dict for the active episode, or raise HTTP 400."""
+    if _current_session_id is None or _current_session_id not in _sessions:
+        raise HTTPException(
+            status_code=400,
+            detail="No active session. Call /reset first.",
+        )
+    return _sessions[_current_session_id]
 
 
 # ---------------------------------------------------------------------------
 # Request / response helpers
 # ---------------------------------------------------------------------------
 
-class StepRequest(BaseModel):
-    action_type: str
-    transaction_id: str
+class ResetRequest(BaseModel):
+    """POST /reset body — compatible with openenv.core ResetRequest."""
+    seed: Optional[int] = None
+    episode_id: Optional[str] = None
+
+
+class UnifiedStepRequest(BaseModel):
+    """
+    POST /step body — accepts both the official openenv wire format::
+
+        {"action": {"action_type": "approve", "transaction_id": "TXN-E001"},
+         "timeout_s": null}
+
+    and the legacy flat format (backward compat)::
+
+        {"action_type": "approve", "transaction_id": "TXN-E001"}
+    """
+    model_config = ConfigDict(extra="allow")
+
+    # Official openenv wire fields
+    action: Optional[Dict[str, Any]] = None
+    timeout_s: Optional[float] = None
+    request_id: Optional[str] = None
+
+    # Legacy flat fields
+    action_type: Optional[str] = None
+    transaction_id: Optional[str] = None
     reason: Optional[str] = None
     confidence: Optional[float] = None
+
+    def resolved_action(self) -> PayOpsAction:
+        """Parse the action from whichever format was supplied."""
+        if self.action is not None:
+            return PayOpsAction(**self.action)
+        if self.action_type is None:
+            raise HTTPException(status_code=422, detail="action_type is required")
+        return PayOpsAction(
+            action_type=self.action_type,
+            transaction_id=self.transaction_id or "",
+            reason=self.reason,
+            confidence=self.confidence,
+        )
+
+
+class EnvResponse(BaseModel):
+    """Standard openenv wire response: observation dict + reward + done."""
+    observation: Dict[str, Any]
+    reward: Optional[float] = None
+    done: bool = False
 
 
 class BaselineResult(BaseModel):
@@ -79,77 +134,89 @@ class BaselineResult(BaseModel):
 class ReplayRequest(BaseModel):
     actions: List[str]
     confidences: Optional[List[Optional[float]]] = None
+    seed: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@app.post("/reset", response_model=PayOpsObservation, summary="Reset the environment")
-async def reset():
+@app.post("/reset", response_model=EnvResponse, summary="Reset the environment")
+async def reset(request: ResetRequest = ResetRequest()):
     """Reset the environment and return the first transaction observation."""
-    global _episode_actions, _episode_tasks, _episode_confs
-    _episode_actions = []
-    _episode_confs   = []
-    _episode_tasks   = list(TASKS)
-    obs = await _env.reset_async()
-    return obs
+    global _current_session_id
+    async with _state_lock:
+        env = PayOpsEnvironment()
+        obs = await env.reset_async(seed=request.seed, episode_id=request.episode_id)
+        session_id = env.state().episode_id
+        _sessions[session_id] = {
+            "env":     env,
+            "actions": [],
+            "confs":   [],
+            "tasks":   list(env._tasks),   # jittered tasks for this episode
+        }
+        _current_session_id = session_id
+        # Prune oldest sessions when the cap is exceeded
+        if len(_sessions) > _MAX_SESSIONS:
+            oldest = next(iter(_sessions))
+            del _sessions[oldest]
+    return EnvResponse(observation=obs.model_dump(), reward=None, done=False)
 
 
-@app.post("/step", response_model=PayOpsObservation, summary="Execute an action")
-async def step(request: StepRequest):
+@app.post("/step", response_model=EnvResponse, summary="Execute an action")
+async def step(request: UnifiedStepRequest):
     """
     Submit an action for the current transaction.
 
-    Valid action_type values:
-      Terminal:      approve | reject | flag | escalate | hold
-      Investigation: inspect | request_docs | verify_kyc | contact_sender | file_sar
+    Accepts both the official openenv wire format
+    ``{"action": {"action_type": "...", "transaction_id": "..."}, "timeout_s": null}``
+    and the legacy flat format
+    ``{"action_type": "...", "transaction_id": "..."}``.  Returns
+    ``{"observation": {...}, "reward": <float>, "done": <bool>}``.
     """
-    if request.action_type.lower() not in VALID_ACTIONS:
+    action = request.resolved_action()
+    if action.action_type.lower() not in VALID_ACTIONS:
         raise HTTPException(
             status_code=422,
-            detail=f"Invalid action_type '{request.action_type}'. "
+            detail=f"Invalid action_type '{action.action_type}'. "
                    f"Valid values: {sorted(VALID_ACTIONS)}",
         )
-    action = PayOpsAction(
-        action_type=request.action_type,
-        transaction_id=request.transaction_id,
-        reason=request.reason,
-        confidence=request.confidence,
-    )
-    try:
-        obs = await _env.step_async(action)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    async with _state_lock:
+        sess = _current_session()
+        try:
+            obs = await sess["env"].step_async(action)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
-    _episode_actions.append(request.action_type.lower())
-    _episode_confs.append(request.confidence)
+        sess["actions"].append(action.action_type.lower())
+        sess["confs"].append(action.confidence)
 
-    # Auto-save completed episode to leaderboard
-    if obs.done:
-        result = grade_episode(
-            _episode_actions, _episode_tasks, _episode_confs
-        )
-        _leaderboard.append(
-            {
-                "episode_id":       _env.state().episode_id,
-                "timestamp":        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "normalised_score": result.normalised_score,
-                "total_reward":     result.total_reward,
-                "budget_spent":     result.budget_spent,
-                "budget_overspend": result.budget_overspend,
-                "passed":           result.passed,
-                "steps":            len(_episode_actions),
-            }
-        )
+        # Auto-save completed episode to leaderboard
+        if obs.done:
+            result = grade_episode(
+                sess["actions"], sess["tasks"], sess["confs"]
+            )
+            _leaderboard.append(
+                {
+                    "episode_id":       sess["env"].state().episode_id,
+                    "timestamp":        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "normalised_score": result.normalised_score,
+                    "total_reward":     result.total_reward,
+                    "budget_spent":     result.budget_spent,
+                    "budget_overspend": result.budget_overspend,
+                    "passed":           result.passed,
+                    "steps":            len(sess["actions"]),
+                }
+            )
 
-    return obs
+    return EnvResponse(observation=obs.model_dump(), reward=obs.reward, done=obs.done)
 
 
 @app.get("/state", response_model=PayOpsState, summary="Get internal environment state")
 async def state():
     """Return the current internal state of the environment."""
-    return _env.state()
+    async with _state_lock:
+        return _current_session()["env"].state()
 
 
 @app.get("/schema", summary="Get action and observation schemas")
@@ -193,12 +260,14 @@ async def grader():
     """
     Grade the episode using all actions taken since the last /reset.
     """
-    if not _episode_actions:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "No actions recorded. Run /reset then /step first."},
-        )
-    result = grade_episode(_episode_actions, _episode_tasks, _episode_confs)
+    async with _state_lock:
+        sess = _current_session()
+        if not sess["actions"]:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No actions recorded. Run /reset then /step first."},
+            )
+        result = grade_episode(sess["actions"], sess["tasks"], sess["confs"])
     return {
         "total_reward":       result.total_reward,
         "max_possible_reward":result.max_possible_reward,
@@ -236,8 +305,14 @@ async def analytics():
     if not _leaderboard:
         return {"message": "No completed episodes yet. Run a full episode first."}
 
+    async with _state_lock:
+        sess = _current_session()
+        actions = list(sess["actions"])
+        tasks   = list(sess["tasks"])
+        confs   = list(sess["confs"])
+
     # Per-difficulty accuracy from the last episode's per_task breakdown
-    result = grade_episode(_episode_actions, _episode_tasks, _episode_confs)
+    result = grade_episode(actions, tasks, confs)
     by_diff: Dict[str, Dict] = defaultdict(lambda: {"total": 0, "correct": 0, "rewards": []})
     for pt in result.per_task_rewards:
         d = pt["difficulty"]
@@ -271,10 +346,12 @@ async def analytics():
 @app.post("/replay", summary="Grade a supplied action sequence")
 async def replay(request: ReplayRequest):
     """
-    Grade a supplied list of actions against the full task bank without
+    Grade a supplied list of actions against the task bank without
     modifying the current environment state.
 
-    Useful for offline evaluation and leaderboard submissions.
+    Pass ``seed`` to grade against a specific jittered task set (matching a
+    live episode seeded with the same value).  Omitting ``seed`` grades
+    against the canonical un-jittered tasks for offline baseline comparisons.
     """
     actions = [a.lower() for a in request.actions]
     invalid = [a for a in actions if a not in VALID_ACTIONS]
@@ -284,8 +361,15 @@ async def replay(request: ReplayRequest):
             detail=f"Invalid action(s): {invalid}. Valid: {sorted(VALID_ACTIONS)}",
         )
 
+    if request.seed is not None:
+        _replay_env = PayOpsEnvironment()
+        await _replay_env.reset_async(seed=request.seed)
+        task_list = list(_replay_env._tasks)
+    else:
+        task_list = list(TASKS)
+
     confs  = request.confidences or [None] * len(actions)
-    result = grade_episode(actions, list(TASKS), confs)
+    result = grade_episode(actions, task_list, confs)
     return {
         "total_reward":        result.total_reward,
         "max_possible_reward": result.max_possible_reward,
@@ -310,6 +394,17 @@ async def leaderboard():
 # ---------------------------------------------------------------------------
 # WebSocket endpoint for persistent sessions
 # ---------------------------------------------------------------------------
+
+@app.get("/ws", include_in_schema=False)
+async def ws_http_upgrade():
+    """Return 426 Upgrade Required for plain HTTP requests to the WS endpoint."""
+    from fastapi.responses import Response
+    return Response(
+        content="WebSocket upgrade required",
+        status_code=426,
+        headers={"Upgrade": "websocket"},
+    )
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -378,22 +473,39 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/health", summary="Health check")
 async def health():
-    return {"status": "ok", "environment": "payops_env", "version": "2.0.0"}
+    async with _state_lock:
+        if _current_session_id and _current_session_id in _sessions:
+            st = _sessions[_current_session_id]["env"].state()
+            episode_id   = st.episode_id
+            episode_seed = st.episode_seed
+            current_task = st.current_task_id
+            processed    = st.transactions_processed
+            total        = st.total_tasks
+        else:
+            episode_id = episode_seed = current_task = None
+            processed  = 0
+            total      = len(TASKS)
+    return {
+        "status": "ok",
+        "environment": "payops_env",
+        "version": "2.0.0",
+        "episode_id": episode_id,
+        "episode_seed": episode_seed,
+        "current_task_id": current_task,
+        "transactions_processed": processed,
+        "total_tasks": total,
+    }
 
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
-def main(host: str = "0.0.0.0", port: int = 8000):
+def main(host: str = "0.0.0.0", port: int = int(__import__("os").environ.get("PORT", "8000"))):
     import uvicorn
     uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8000)
-    args = parser.parse_args()
-    main(port=args.port)
+    main()
 

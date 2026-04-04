@@ -16,13 +16,15 @@ entry; the grader handles them as one decision unit.
 
 from __future__ import annotations
 
+import copy
+import random
 import uuid
 from collections import deque
 from typing import Deque, List, Optional
 
 from payops_env.grader import INVESTIGATION_BONUS, grade
 from payops_env.models import PayOpsAction, PayOpsObservation, PayOpsState
-from payops_env.tasks import ACTION_COSTS, TASKS, PayOpsTask
+from payops_env.tasks import ACTION_COSTS, TASK_VARIANTS, TASKS, PayOpsTask
 
 
 TERMINAL_ACTIONS   = {"approve", "reject", "flag", "escalate", "hold"}
@@ -62,14 +64,55 @@ class PayOpsEnvironment:
     # OpenEnv API
     # ------------------------------------------------------------------
 
-    async def reset_async(self) -> PayOpsObservation:
-        self._tasks = list(TASKS)
+    async def reset_async(
+        self,
+        seed: Optional[int] = None,
+        episode_id: Optional[str] = None,
+    ) -> PayOpsObservation:
+        # --- per-episode jitter: prevents agent overfitting to fixed values ---
+        # Use caller-supplied seed when provided (enables reproducibility).
+        episode_seed = seed if seed is not None else int(uuid.uuid4().int % 2**31)
+        rng = random.Random(episode_seed)
+        jittered: List[PayOpsTask] = []
+        for t in TASKS:
+            jt = copy.copy(t)
+            jt.amount     = round(t.amount * rng.uniform(0.85, 1.20), 2)
+            jt.risk_score = round(min(1.0, max(0.0, t.risk_score + rng.gauss(0, 0.03))), 4)
+            if t.velocity_1h  is not None:
+                jt.velocity_1h  = max(0, t.velocity_1h  + rng.randint(-3, 3))
+            if t.velocity_24h is not None:
+                jt.velocity_24h = max(0, t.velocity_24h + rng.randint(-3, 3))
+            jittered.append(jt)
+        self._tasks = jittered
+
+        # ── Variant pool selection ──────────────────────────────────────────────
+        # Each task in TASK_VARIANTS has 2 alternative scenarios (in addition to
+        # the base).  The episode seed selects which scenario plays out, making
+        # the correct_action unknowable from the task_id alone — the agent MUST
+        # investigate to discover the decisive evidence.
+        #
+        # seed=0 is the canonical episode (all base variants); used by the test
+        # suite so that hardcoded expected rewards remain stable.
+        if episode_seed != 0:
+            for i, jt in enumerate(self._tasks):
+                variants = TASK_VARIANTS.get(jt.task_id, [])
+                if not variants:
+                    continue
+                # variant_idx=0 → base (no changes); 1..N → variants[0..N-1]
+                variant_idx = (episode_seed * 1009 + i * 17) % (len(variants) + 1)
+                if variant_idx == 0:
+                    continue
+                overrides = variants[variant_idx - 1]
+                for key, val in overrides.items():
+                    setattr(jt, key, val)
         self._current_task = self._tasks[0]
         self._used_inv = {}
         self._sar_filed = set()
         self._recent_decisions = deque(maxlen=_RECENT_WINDOW)
+        self._episode_seed = episode_seed
         self._state = PayOpsState(
-            episode_id=str(uuid.uuid4()),
+            episode_id=episode_id if episode_id is not None else str(uuid.uuid4()),
+            episode_seed=episode_seed,
             step_count=0,
             current_task_id=self._current_task.task_id,
             transactions_processed=0,
@@ -101,6 +144,30 @@ class PayOpsEnvironment:
         task = self._current_task
         task_id = task.task_id
         cost = ACTION_COSTS.get(action_type, 0.0)
+
+        # ── MULTI-STEP CHAIN GATE ─────────────────────────────────────────────
+        # Critical tasks with chain_total > 1 require (chain_total − 1)
+        # investigation sub-actions before a terminal decision is accepted.
+        # Blocked attempts return a helpful message without advancing the task.
+        if action_type in TERMINAL_ACTIONS:
+            chain_min = max(0, getattr(task, "chain_total", 1) - 1)
+            inv_done  = len(self._used_inv.get(task_id, set()))
+            if chain_min > 0 and inv_done < chain_min:
+                needed = chain_min - inv_done
+                return self._make_observation(
+                    reward=-0.05,
+                    done=False,
+                    info={
+                        "event":              "chain_gate_blocked",
+                        "chain_status":       "investigation_required",
+                        "chain_steps_needed": needed,
+                        "message": (
+                            f"This {task.difficulty} transaction requires {needed} "
+                            f"more investigation step(s) before a terminal decision. "
+                            f"Please investigate first."
+                        ),
+                    },
+                )
 
         # Deduct cost
         self._state.budget_spent = round(self._state.budget_spent + cost, 4)
@@ -143,11 +210,13 @@ class PayOpsEnvironment:
                 )
                 reveal_field = "docs_notes"
 
+            used_so_far = list(self._used_inv.get(task_id, set()))
             info = {
-                "event":        action_type,
-                "already_used": already,
-                reveal_field:   reveal_text,
-                "budget_remaining": round(
+                "event":               action_type,
+                "already_used":        already,
+                "investigation_used":  used_so_far,  # full list for this task
+                reveal_field:          reveal_text,
+                "budget_remaining":    round(
                     self.BUDGET_LIMIT - self._state.budget_spent, 4
                 ),
             }
@@ -160,7 +229,12 @@ class PayOpsEnvironment:
         sar_used = task_id in self._sar_filed
         inspected_already = "inspect" in self._used_inv.get(task_id, set())
 
-        reward = grade(action_type, task, inspected_already=inspected_already)
+        investigation_done = bool(self._used_inv.get(task_id, set()))
+        reward = grade(
+            action_type, task,
+            inspected_already=inspected_already,
+            investigation_done=investigation_done,
+        )
         self._state.cumulative_reward = round(
             self._state.cumulative_reward + reward, 4
         )
@@ -226,6 +300,13 @@ class PayOpsEnvironment:
         task = self._current_task
         steps_remaining = self._state.total_tasks - self._state.transactions_processed
 
+        # Progressive disclosure: sensitive forensic fields are only surfaced after
+        # the agent has called 'inspect' on this task.  This makes the investigate-
+        # before-deciding mechanic load-bearing rather than cosmetic.
+        task_id = task.task_id
+        inspected = "inspect" in self._used_inv.get(task_id, set())
+        contacted = "contact_sender" in self._used_inv.get(task_id, set())
+
         return PayOpsObservation(
             # ── transaction core ──
             transaction_id=task.transaction_id,
@@ -250,9 +331,9 @@ class PayOpsEnvironment:
             country_risk=task.country_risk,
             kyc_status=task.kyc_status,
             kyc_expiry_days=getattr(task, "kyc_expiry_days", None),
-            previous_violations=task.previous_violations,
-            previous_sars=getattr(task, "previous_sars", None),
-            counterparty_risk=getattr(task, "counterparty_risk", None),
+            previous_violations=task.previous_violations if inspected else None,
+            previous_sars=getattr(task, "previous_sars", None) if inspected else None,
+            counterparty_risk=getattr(task, "counterparty_risk", None) if inspected else None,
             # ── chain context ──
             chain_total=getattr(task, "chain_total", 1),
             chain_step=self._state.step_count,
@@ -268,7 +349,8 @@ class PayOpsEnvironment:
                 reveal_text if reveal_field == "kyc_notes" else None
             ),
             contact_notes=(
-                reveal_text if reveal_field == "contact_notes" else None
+                reveal_text if reveal_field == "contact_notes"
+                else (info.get("contact_notes") if contacted else None)
             ),
             # ── episode meta ──
             task_id=task.task_id,
@@ -277,10 +359,12 @@ class PayOpsEnvironment:
             steps_remaining=steps_remaining,
             action_cost=ACTION_COSTS.get(info.get("event", ""), 0.0),
             budget_remaining=round(self.BUDGET_LIMIT - self._state.budget_spent, 4),
+            investigation_hints=[],  # not surfaced upfront; agent must explore
             recent_decisions=list(self._recent_decisions),
             reward=reward,
             cumulative_reward=self._state.cumulative_reward,
             done=done,
+            network_graph=getattr(task, "network_graph", None) if inspected else None,
             info=info,
         )
 

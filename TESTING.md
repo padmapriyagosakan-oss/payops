@@ -30,7 +30,7 @@ curl -s http://localhost:8000/health
 
 **Expected output**
 ```json
-{"status": "ok", "environment": "payops_env", "version": "1.0.0"}
+{"status": "ok", "environment": "payops_env", "version": "2.0.0"}
 ```
 
 **Failure indicator:** Connection refused, or any field missing / wrong value.
@@ -63,7 +63,7 @@ curl -s http://localhost:8000/schema | python3 -m json.tool
 
 ## T-03  Tasks Endpoint
 
-**Goal:** Confirm all 12 tasks are returned with the correct difficulty distribution.
+**Goal:** Confirm all 20 tasks are returned with the correct difficulty distribution.
 
 ```bash
 curl -s http://localhost:8000/tasks | python3 -c "
@@ -75,30 +75,41 @@ c = Counter(t['difficulty'] for t in d['tasks'])
 print('By difficulty:', dict(c))
 print()
 for t in d['tasks']:
-    print(f\"  {t['task_id']:12} [{t['difficulty']:6}] correct={t['correct_action']}\")
+    print(f\"  {t['task_id']:12} [{t['difficulty']:8}] correct={t['correct_action']}\")
 "
 ```
 
 **Expected output**
 ```
-Total tasks: 12
-By difficulty: {'easy': 4, 'medium': 4, 'hard': 4}
+Total tasks: 20
+By difficulty: {'easy': 4, 'medium': 6, 'hard': 6, 'critical': 4}
 
-  EASY-001     [easy  ] correct=approve
-  EASY-002     [easy  ] correct=reject
-  EASY-003     [easy  ] correct=approve
-  EASY-004     [easy  ] correct=flag
-  MED-001      [medium] correct=escalate
-  MED-002      [medium] correct=hold
-  MED-003      [medium] correct=flag
-  MED-004      [medium] correct=flag
-  HARD-001     [hard  ] correct=escalate
-  HARD-002     [hard  ] correct=reject
-  HARD-003     [hard  ] correct=reject
-  HARD-004     [hard  ] correct=approve
+  EASY-001     [easy    ] correct=approve
+  EASY-002     [easy    ] correct=reject
+  EASY-003     [easy    ] correct=approve
+  EASY-004     [easy    ] correct=flag
+  MED-001      [medium  ] correct=escalate
+  MED-002      [medium  ] correct=hold
+  MED-003      [medium  ] correct=flag
+  MED-004      [medium  ] correct=flag
+  MED-005      [medium  ] correct=hold
+  MED-006      [medium  ] correct=escalate
+  HARD-001     [hard    ] correct=escalate
+  HARD-002     [hard    ] correct=reject
+  HARD-003     [hard    ] correct=reject
+  HARD-004     [hard    ] correct=approve
+  HARD-005     [hard    ] correct=escalate
+  HARD-006     [hard    ] correct=flag
+  CRIT-001     [critical] correct=approve
+  CRIT-002     [critical] correct=reject
+  CRIT-003     [critical] correct=escalate
+  CRIT-004     [critical] correct=reject
 ```
 
-**Failure indicator:** count != 12, missing difficulty tier, wrong correct_action.
+> Note: correct_action values for jitter-variant tasks (EASY-004, MED-001/003/004/006,
+> HARD-001/006, CRIT-001/003/004) may differ per episode seed — the above shows default values.
+
+**Failure indicator:** count != 20, missing difficulty tier, wrong correct_action.
 
 ---
 

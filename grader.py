@@ -1,48 +1,43 @@
 """
 Grader for the PayOps environment.
 
-Reward design
--------------
-The grader provides a *partial-credit* reward signal so agents receive
-feedback for cautious-but-not-perfect decisions.
+Reward design (v2 — trajectory-based)
+--------------------------------------
+The grader rewards *correct intermediate reasoning* as well as the final
+call, so agents receive a dense learning signal across the full trajectory.
 
-Base rewards
-~~~~~~~~~~~~
-  Correct action                        → +1.0  (full credit)
-  Partial-credit adjacent action        → per-task fraction of +1.0
-  approve when should be reject/escalate→ -1.0  (worst mistake — approving fraud)
-  approve when should be flag/hold      → -0.5
-  reject when should be approve         → -0.5  (over-rejection)
-  any other wrong terminal action       → -0.25
+Terminal action credit is now split:
+  Correct final action           → +1.00
+  Partial-credit adjacent action → fraction × 1.00
+  approve when should be reject/escalate → −1.00  (worst mistake)
+  approve when should be flag/hold       → −0.50
+  reject  when should be approve         → −0.50
+  any other wrong terminal action        → −0.25
 
-  Investigation sub-actions  (non-terminal):
-    inspect / request_docs / verify_kyc / contact_sender used BEFORE the
-    terminal decision when the task requests them  → +0.15 bonus each
-    Same investigation action used twice on same task → +0.0 (no double-dip)
+Skip-investigation penalty (hard / critical tasks only):
+  Agent issued zero investigation sub-actions on a task that has
+  requires_investigation:
+    • Wrong terminal action  → credit × 0.50
+    • Correct terminal action → credit × 0.80
+  Correct actions that skip investigation still earn partial credit,
+  but the full reward requires proper investigation first.
 
-Modifiers
-~~~~~~~~~
-  Difficulty weight     — multiplies the base reward:
-    easy=1.0, medium=1.2, hard=1.5, critical=2.0
+Investigation sub-action bonuses (per eligible, first use only):
+  Used one of task.requires_investigation  → +0.15
+  Flag identification: agent used inspect AND task.key_flags ⊆ obs.flags → +0.20
+  (Both bonuses are independent and stackable.)
 
-  Confidence bonus/penalty  — applied when the agent provides confidence:
-    high-confidence (≥0.8) AND correct   → +0.10
-    high-confidence (≥0.8) AND wrong     → -0.10
+Duplicate investigation penalty:
+  Same sub-action on same task more than once → −0.05
 
-  Cost penalty          — investigation actions have per-action budget costs
-    (see tasks.ACTION_COSTS).  Spending beyond budget_limit reduces episode
-    score by budget_overspend × 0.1.
+Modifiers:
+  Difficulty weight: easy=1.0, medium=1.2, hard=1.5, critical=2.0
+  Confidence (≥0.8) AND correct  → +0.10
+  Confidence (≥0.8) AND wrong    → −0.10
+  Regulatory bonus (file_sar before terminal on regulatory task) → +0.20
+  Budget overspend penalty: (spent − limit) × 0.10
 
-  Time penalty          — excessive investigation steps on a single task:
-    each investigation sub-action beyond the first on the same task → -0.05
-
-  Regulatory bonus      — for tasks requiring a SAR filing:
-    agent called file_sar before terminal action → +0.20 bonus
-
-Episode score (0–1)
-~~~~~~~~~~~~~~~~~~~
-  Computed by summing difficulty-weighted reward across all tasks and
-  normalising against the maximum theoretically achievable reward.
+Normalised episode score: [0, 1], strictly clamped.
 """
 
 from __future__ import annotations
@@ -56,19 +51,29 @@ from payops_env.tasks import ACTION_COSTS, PayOpsTask
 # Constants
 # ---------------------------------------------------------------------------
 
-FULL_CREDIT = 1.0
+# Terminal-action credit: correct action earns full credit
+TERMINAL_CORRECT      = 1.0
+FULL_CREDIT           = TERMINAL_CORRECT  # alias for backward compat
 
 WRONG_APPROVE_FRAUD   = -1.0
 WRONG_APPROVE_CAUTION = -0.5
 WRONG_REJECT_GOOD     = -0.5
 WRONG_DEFAULT         = -0.25
 
-INVESTIGATION_BONUS       = 0.15   # per eligible sub-action used before terminal
-TIME_PENALTY_PER_EXTRA_STEP = 0.05 # per duplicate investigation on same task
-CONFIDENCE_CORRECT_BONUS  = 0.10
-CONFIDENCE_WRONG_PENALTY  = -0.10
-REGULATORY_BONUS          = 0.20   # filing SAR when required
-BUDGET_OVERSPEND_PENALTY  = 0.10   # per unit of budget exceeded
+# Investigation trajectory bonuses
+INVESTIGATION_BONUS         = 0.15   # per eligible sub-action used (first use)
+FLAG_IDENTIFICATION_BONUS   = 0.20   # agent ran inspect AND all key_flags are in obs
+TIME_PENALTY_PER_EXTRA_STEP = 0.05   # duplicate investigation on same task
+
+CONFIDENCE_CORRECT_BONUS = 0.10
+CONFIDENCE_WRONG_PENALTY = -0.10
+REGULATORY_BONUS         = 0.20
+BUDGET_OVERSPEND_PENALTY = 0.10
+# Skip-investigation penalty for hard/critical tasks with requires_investigation.
+# Applied when the agent issued ZERO investigation sub-actions for that task.
+# Wrong terminal: halved.  Correct terminal: 20% reduction (still well above minimum).
+SKIP_INVESTIGATION_MULTIPLIER       = 0.50   # applied to wrong terminals
+SKIP_INV_CORRECT_MULTIPLIER         = 0.80   # applied to correct terminals
 
 DIFFICULTY_WEIGHT: Dict[str, float] = {
     "easy":     1.0,
@@ -80,6 +85,10 @@ DIFFICULTY_WEIGHT: Dict[str, float] = {
 INVESTIGATION_ACTIONS: Set[str] = {
     "inspect", "request_docs", "verify_kyc", "contact_sender", "file_sar"
 }
+
+# Maximum achievable reward per task at weight=1.0 (used for normalisation)
+# correct terminal (1.0); investigation bonuses are extra and clamped at 1.0
+_MAX_TASK_RAW = TERMINAL_CORRECT
 
 
 # ---------------------------------------------------------------------------
@@ -93,10 +102,10 @@ def _is_investigation(action_type: str) -> bool:
 def _base_terminal_reward(action_type: str, task: PayOpsTask) -> float:
     """Return the base reward for a terminal action against a task."""
     if action_type == task.correct_action:
-        return FULL_CREDIT
+        return TERMINAL_CORRECT
 
     if action_type in task.partial_credit_actions:
-        return FULL_CREDIT * task.partial_credit_actions[action_type]
+        return TERMINAL_CORRECT * task.partial_credit_actions[action_type]
 
     if action_type == "approve" and task.correct_action in ("reject", "escalate"):
         return WRONG_APPROVE_FRAUD
@@ -114,17 +123,25 @@ def step_reward(
     action_type: str,
     task: PayOpsTask,
     inspected_already: bool = False,
+    investigation_done: bool = True,
 ) -> float:
     """
-    Backward-compatible single-step reward used by the real-time environment.
+    Single-step reward used by the real-time environment (step_async).
 
-    Investigation actions return 0 (already handled inside environment.step_async
-    through the richer grader logic).  Terminal actions use the base reward table.
+    ``investigation_done`` must be False when the agent issued zero
+    investigation sub-actions for this task — the same skip-investigation
+    penalty applied by grade_episode is then applied here so the per-step
+    reward the agent sees during training matches the final episode score.
     """
     if _is_investigation(action_type):
         return 0.0 if inspected_already else INVESTIGATION_BONUS
 
-    return _base_terminal_reward(action_type, task)
+    base = _base_terminal_reward(action_type, task)
+    requires_inv = getattr(task, "requires_investigation", set())
+    if requires_inv and not investigation_done and task.difficulty in ("hard", "critical"):
+        correct = action_type == task.correct_action
+        base = base * (SKIP_INV_CORRECT_MULTIPLIER if correct else SKIP_INVESTIGATION_MULTIPLIER)
+    return base
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +158,7 @@ class TaskGradeDetail:
     investigation_actions_used: List[str]
     base_reward: float
     investigation_bonus: float
+    flag_id_bonus: float
     time_penalty: float
     confidence_modifier: float
     regulatory_bonus: float
@@ -155,14 +173,26 @@ def _grade_single_task(
     task: PayOpsTask,
     agent_confidence: Optional[float] = None,
 ) -> TaskGradeDetail:
-    weight = DIFFICULTY_WEIGHT.get(task.difficulty, 1.0)
-    base   = _base_terminal_reward(terminal_action, task)
+    weight  = DIFFICULTY_WEIGHT.get(task.difficulty, 1.0)
+    base    = _base_terminal_reward(terminal_action, task)
     correct = terminal_action == task.correct_action
 
-    # ── investigation bonus and time penalty ────────────────────────────────
+    # ── skip-investigation penalty ───────────────────────────────────────────
+    # Hard/critical tasks with requires_investigation penalise agents that skip
+    # all investigation sub-actions before making the terminal call.
+    # Wrong terminal  → halve the credit (existing behaviour).
+    # Correct terminal → 20% reduction; full reward requires investigation first.
+    requires_inv = getattr(task, "requires_investigation", set())
+    if requires_inv and not investigation_actions and task.difficulty in ("hard", "critical"):
+        if not correct:
+            base = base * SKIP_INVESTIGATION_MULTIPLIER
+        else:
+            base = base * SKIP_INV_CORRECT_MULTIPLIER
+
+    # ── investigation trajectory bonus & time penalty ────────────────────────
     inv_bonus  = 0.0
     time_pen   = 0.0
-    eligible   = task.requires_investigation  # set of actions agent should use
+    eligible   = getattr(task, "requires_investigation", set())
     seen_counts: Dict[str, int] = {}
     for inv_action in investigation_actions:
         seen_counts[inv_action] = seen_counts.get(inv_action, 0) + 1
@@ -171,17 +201,29 @@ def _grade_single_task(
         elif seen_counts[inv_action] > 1:
             time_pen += TIME_PENALTY_PER_EXTRA_STEP
 
-    # ── confidence modifier ─────────────────────────────────────────────────
+    # ── flag-identification bonus ────────────────────────────────────────────
+    # Awarded when: agent used 'inspect' AND the task has key_flags AND all
+    # key_flags are present in the task's flag list (they are always present
+    # as the randomised episode preserves the original flags).
+    flag_id = 0.0
+    key_flags = getattr(task, "key_flags", [])
+    if key_flags and "inspect" in investigation_actions:
+        # key_flags on the task are guaranteed to be in task.flags; reward
+        # the agent for using inspect (which reveals them) when they matter.
+        flag_id = FLAG_IDENTIFICATION_BONUS
+
+    # ── confidence modifier ──────────────────────────────────────────────────
     conf_mod = 0.0
     if agent_confidence is not None and agent_confidence >= 0.8:
         conf_mod = CONFIDENCE_CORRECT_BONUS if correct else CONFIDENCE_WRONG_PENALTY
 
-    # ── regulatory bonus ────────────────────────────────────────────────────
+    # ── regulatory bonus ─────────────────────────────────────────────────────
     reg_bonus = 0.0
-    if task.regulatory_action and "file_sar" in investigation_actions:
+    if getattr(task, "regulatory_action", False) and "file_sar" in investigation_actions:
         reg_bonus = REGULATORY_BONUS
 
-    total = weight * (base + inv_bonus - time_pen + conf_mod + reg_bonus)
+    raw_total = base + inv_bonus + flag_id - time_pen + conf_mod + reg_bonus
+    total = weight * raw_total
 
     return TaskGradeDetail(
         task_id=task.task_id,
@@ -192,6 +234,7 @@ def _grade_single_task(
         investigation_actions_used=investigation_actions,
         base_reward=round(base, 4),
         investigation_bonus=round(inv_bonus, 4),
+        flag_id_bonus=round(flag_id, 4),
         time_penalty=round(time_pen, 4),
         confidence_modifier=round(conf_mod, 4),
         regulatory_bonus=round(reg_bonus, 4),
@@ -201,6 +244,7 @@ def _grade_single_task(
             "base":           round(base, 4),
             "weight":         weight,
             "investigation":  round(inv_bonus, 4),
+            "flag_id":        round(flag_id, 4),
             "time_penalty":   round(-time_pen, 4),
             "confidence":     round(conf_mod, 4),
             "regulatory":     round(reg_bonus, 4),
@@ -217,7 +261,7 @@ def _grade_single_task(
 class EpisodeResult:
     total_reward: float
     max_possible_reward: float
-    normalised_score: float        # 0.0 – 1.0
+    normalised_score: float        # strictly 0.0 – 1.0
     per_task_rewards: List[dict]
     budget_spent: float
     budget_overspend: float
@@ -237,18 +281,7 @@ def grade_episode(
     ``actions`` is the flat list of all actions taken (including investigation
     sub-actions interspersed between terminal decisions).
 
-    The grader separates them by treating any action in INVESTIGATION_ACTIONS as
-    a sub-action that accumulates per-task until a terminal action closes the task.
-
-    Args:
-        actions:       Ordered list of action_type strings.
-        tasks:         Ordered list of PayOpsTask objects.
-        confidences:   Optional parallel list of agent confidence values (same
-                       length as ``actions``).  Use None for missing entries.
-        budget_limit:  Maximum investigation budget.  Overspend is penalised.
-
-    Returns:
-        EpisodeResult with comprehensive score breakdown.
+    Returns EpisodeResult with normalised_score strictly in [0.0, 1.0].
     """
     if confidences is None:
         confidences = [None] * len(actions)
@@ -256,34 +289,34 @@ def grade_episode(
     per_task_details: List[TaskGradeDetail] = []
     budget_spent = 0.0
 
-    task_idx   = 0
-    pending_inv: List[str]           = []   # sub-actions for current task
+    task_idx     = 0
+    pending_inv: List[str]              = []
     pending_conf: List[Optional[float]] = []
 
-    for i, (action, conf) in enumerate(zip(actions, confidences)):
+    for action, conf in zip(actions, confidences):
         budget_spent += ACTION_COSTS.get(action, 0.0)
 
         if _is_investigation(action):
             pending_inv.append(action)
             pending_conf.append(conf)
         else:
-            # terminal action → grade and advance task pointer
             if task_idx >= len(tasks):
                 break
-            task = tasks[task_idx]
-            # Use the confidence from the terminal action step
+            task   = tasks[task_idx]
             detail = _grade_single_task(action, pending_inv, task, agent_confidence=conf)
             per_task_details.append(detail)
             pending_inv   = []
             pending_conf  = []
             task_idx     += 1
 
-    # Handle any tasks with no actions (agent ran out of steps)
+    # Tasks the agent never reached get a small default penalty
     while task_idx < len(tasks):
-        task = tasks[task_idx]
-        detail = _grade_single_task("approve", [], task, agent_confidence=None)
-        detail.base_reward = WRONG_DEFAULT
-        detail.total_reward = DIFFICULTY_WEIGHT.get(task.difficulty, 1.0) * WRONG_DEFAULT
+        task   = tasks[task_idx]
+        weight = DIFFICULTY_WEIGHT.get(task.difficulty, 1.0)
+        detail = _grade_single_task("hold", [], task, agent_confidence=None)
+        # Override to a neutral miss (no severe penalty for unreached tasks)
+        detail.base_reward  = 0.0
+        detail.total_reward = 0.0
         per_task_details.append(detail)
         task_idx += 1
 
@@ -291,10 +324,17 @@ def grade_episode(
     budget_overspend = max(0.0, budget_spent - budget_limit)
     budget_penalty   = round(budget_overspend * BUDGET_OVERSPEND_PENALTY, 4)
 
-    total = sum(d.total_reward for d in per_task_details) - budget_penalty
+    raw_total  = sum(d.total_reward for d in per_task_details)
+    total      = raw_total - budget_penalty
+
+    # Max possible = each task at full trajectory credit × difficulty weight
+    # (terminal 0.6 + one inv 0.2 + flag_id 0.2) × weight
     max_possible = sum(
-        DIFFICULTY_WEIGHT.get(t.difficulty, 1.0) * FULL_CREDIT for t in tasks
+        DIFFICULTY_WEIGHT.get(t.difficulty, 1.0) * _MAX_TASK_RAW
+        for t in tasks
     )
+
+    # Strict [0, 1] clamp — grader can NEVER exceed 1.0 or go below 0.0
     normalised = max(0.0, min(1.0, total / max_possible)) if max_possible > 0 else 0.0
 
     return EpisodeResult(
@@ -303,15 +343,15 @@ def grade_episode(
         normalised_score=round(normalised, 4),
         per_task_rewards=[
             {
-                "task_id":                  d.task_id,
-                "difficulty":               d.difficulty,
-                "weight":                   d.weight,
-                "terminal_action":          d.terminal_action,
-                "correct_action":           d.correct_action,
-                "investigation_used":       d.investigation_actions_used,
-                "correct":                  d.correct,
-                "reward_breakdown":         d.reward_breakdown,
-                "weighted_reward":          d.total_reward,
+                "task_id":           d.task_id,
+                "difficulty":        d.difficulty,
+                "weight":            d.weight,
+                "terminal_action":   d.terminal_action,
+                "correct_action":    d.correct_action,
+                "investigation_used":d.investigation_actions_used,
+                "correct":           d.correct,
+                "reward_breakdown":  d.reward_breakdown,
+                "weighted_reward":   d.total_reward,
             }
             for d in per_task_details
         ],
@@ -326,7 +366,16 @@ def grade_episode(
 # Convenience wrapper used by the environment
 # ---------------------------------------------------------------------------
 
-def grade(action_type: str, task: PayOpsTask, inspected_already: bool = False) -> float:
+def grade(
+    action_type: str,
+    task: PayOpsTask,
+    inspected_already: bool = False,
+    investigation_done: bool = True,
+) -> float:
     """Single-step reward used inside environment.step_async."""
-    return step_reward(action_type, task, inspected_already=inspected_already)
+    return step_reward(
+        action_type, task,
+        inspected_already=inspected_already,
+        investigation_done=investigation_done,
+    )
 

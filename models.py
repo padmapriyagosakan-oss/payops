@@ -44,6 +44,10 @@ class PayOpsAction(BaseModel):
         le=1.0,
         description="Agent self-reported confidence [0, 1]. Used in reward shaping.",
     )
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional pass-through metadata (openenv.core.Action compatibility).",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -157,8 +161,8 @@ class PayOpsObservation(BaseModel):
         description="Operational cost penalty incurred by the last action",
     )
     budget_remaining: float = Field(
-        default=1.0,
-        description="Fraction of investigation budget remaining (1.0=full, 0.0=exhausted)",
+        default=5.0,
+        description="Remaining investigation budget (starts at 5.0; each investigation action deducts its cost)",
     )
 
     # --- context from prior investigation actions ---
@@ -177,6 +181,16 @@ class PayOpsObservation(BaseModel):
     contact_notes: Optional[str] = Field(
         default=None,
         description="Outcome of contacting the sender via 'contact_sender' action",
+    )
+
+    # --- recommended investigation sub-actions for this task ---
+    investigation_hints: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Sub-actions recommended for this task (non-exhaustive). "
+            "Using them before the terminal decision earns bonus reward and may reveal "
+            "decisive evidence. Empty list = no specific investigation required."
+        ),
     )
 
     # --- recent decision context (last 3 decisions in this episode) ---
@@ -202,9 +216,52 @@ class PayOpsObservation(BaseModel):
         default=0.0, description="Total reward accumulated so far in this episode"
     )
     done: bool = Field(default=False, description="Whether the episode has ended")
+    network_graph: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Mule-chain / correspondent-bank relationship graph for tasks where present",
+    )
     info: Dict[str, Any] = Field(
         default_factory=dict,
         description="Extra diagnostic information (action taken, correct action, etc.)",
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional pass-through metadata (openenv.core.Observation compatibility).",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Reward breakdown (typed model for openenv.core spec compliance)
+# ---------------------------------------------------------------------------
+
+class PayOpsReward(BaseModel):
+    """
+    Typed reward model returned alongside each observation.
+
+    ``value`` is the normalised reward \u2208 [0.0, 1.0] for the episode so far.
+    ``breakdown`` itemises the components that contributed to the raw score.
+    """
+
+    value: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Normalised episode reward \u2208 [0.0, 1.0]",
+    )
+    breakdown: Dict[str, float] = Field(
+        default_factory=dict,
+        description=(
+            "Per-component reward breakdown: terminal_correct, investigation_bonus, "
+            "flag_identification_bonus, confidence_bonus, duplicate_penalty, budget_penalty"
+        ),
+    )
+    raw_total: float = Field(
+        default=0.0,
+        description="Raw (un-normalised) sum of reward components before clamping",
+    )
+    max_possible: float = Field(
+        default=1.0,
+        description="Maximum achievable raw reward for this episode",
     )
 
 
@@ -236,4 +293,8 @@ class PayOpsState(BaseModel):
         description="Recent completed task outcomes for analytics",
     )
     done: bool = False
+    episode_seed: Optional[int] = Field(
+        default=None,
+        description="Random seed used to jitter task parameters this episode (for reproducibility)",
+    )
 
