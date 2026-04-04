@@ -52,8 +52,8 @@ except ImportError:
 
 # ── Config ─────────────────────────────────────────────────────────────────
 
-API_BASE_URL: str    = os.environ.get("API_BASE_URL", "").rstrip("/")
-MODEL_NAME: str      = os.environ.get("MODEL_NAME", "")
+API_BASE_URL: str    = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1").rstrip("/")
+MODEL_NAME: str      = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 # OPENAI_API_KEY is the spec-standard credential; HF_TOKEN is the HF-native alias.
 # OPENAI_API_KEY takes precedence when both are set.
 OPENAI_API_KEY: str  = os.environ.get("OPENAI_API_KEY", "")
