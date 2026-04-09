@@ -107,6 +107,22 @@ class PayOpsTask:
     # chain_total > 1 means the task spans multiple investigation steps.
     # The grader only scores the terminal decision on the last chain step.
 
+    @property
+    def grader(self) -> dict:
+        """Grader configuration for this task.
+
+        Exposed as a computed property so platform validators that import
+        ``TASKS`` from tasks.py can discover grader configs via ``task.grader``.
+        """
+        return {
+            "type": "action_match",
+            "correct_action": self.correct_action,
+            "partial_credit": dict(self.partial_credit_actions),
+            "requires_investigation": list(self.requires_investigation),
+            "regulatory_action": self.regulatory_action,
+            "key_flags": list(self.key_flags),
+        }
+
 
 # =============================================================================
 # EASY  (4 tasks — single clear signal)

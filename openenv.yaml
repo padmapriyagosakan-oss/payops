@@ -125,6 +125,420 @@ tasks:
     medium: 1.2
     hard: 1.5
     critical: 2.0
+  definitions:
+    - task_id: EASY-001
+      difficulty: easy
+      grader:
+        type: action_match
+        correct_action: approve
+        partial_credit: {}
+        requires_investigation: []
+        regulatory_action: false
+        key_flags: []
+    - task_id: EASY-002
+      difficulty: easy
+      grader:
+        type: action_match
+        correct_action: reject
+        partial_credit:
+          escalate: 0.4
+        requires_investigation: []
+        regulatory_action: false
+        key_flags:
+          - sanctioned_country
+          - unknown_sender
+    - task_id: EASY-003
+      difficulty: easy
+      grader:
+        type: action_match
+        correct_action: approve
+        partial_credit: {}
+        requires_investigation: []
+        regulatory_action: false
+        key_flags: []
+    - task_id: EASY-004
+      difficulty: easy
+      grader:
+        type: action_match
+        correct_action: flag
+        partial_credit:
+          escalate: 0.6
+          hold: 0.5
+        requires_investigation: []
+        regulatory_action: false
+        key_flags:
+          - velocity_breach
+    - task_id: EASY-005
+      difficulty: easy
+      grader:
+        type: action_match
+        correct_action: approve
+        partial_credit: {}
+        requires_investigation: []
+        regulatory_action: false
+        key_flags: []
+    - task_id: EASY-006
+      difficulty: easy
+      grader:
+        type: action_match
+        correct_action: flag
+        partial_credit:
+          hold: 0.6
+        requires_investigation: []
+        regulatory_action: false
+        key_flags:
+          - duplicate_transaction
+    - task_id: MED-001
+      difficulty: medium
+      grader:
+        type: action_match
+        correct_action: escalate
+        partial_credit:
+          flag: 0.5
+          hold: 0.4
+        requires_investigation:
+          - inspect
+        regulatory_action: false
+        key_flags:
+          - cross_border
+          - high_value
+    - task_id: MED-002
+      difficulty: medium
+      grader:
+        type: action_match
+        correct_action: hold
+        partial_credit:
+          escalate: 0.6
+          flag: 0.4
+        requires_investigation:
+          - verify_kyc
+        regulatory_action: false
+        key_flags:
+          - kyc_expiry_90d
+    - task_id: MED-003
+      difficulty: medium
+      grader:
+        type: action_match
+        correct_action: flag
+        partial_credit:
+          hold: 0.5
+          escalate: 0.3
+        requires_investigation: []
+        regulatory_action: false
+        key_flags:
+          - amount_spike
+          - pattern_deviation
+    - task_id: MED-004
+      difficulty: medium
+      grader:
+        type: action_match
+        correct_action: flag
+        partial_credit:
+          escalate: 0.5
+          hold: 0.4
+        requires_investigation: []
+        regulatory_action: false
+        key_flags:
+          - crypto_exchange
+    - task_id: MED-005
+      difficulty: medium
+      grader:
+        type: action_match
+        correct_action: hold
+        partial_credit:
+          flag: 0.5
+          escalate: 0.4
+        requires_investigation:
+          - verify_kyc
+        regulatory_action: false
+        key_flags:
+          - kyc_expired
+    - task_id: MED-006
+      difficulty: medium
+      grader:
+        type: action_match
+        correct_action: escalate
+        partial_credit:
+          flag: 0.4
+          hold: 0.5
+        requires_investigation:
+          - request_docs
+        regulatory_action: false
+        key_flags:
+          - first_time_payee
+          - large_first_transfer
+    - task_id: MED-007
+      difficulty: medium
+      grader:
+        type: action_match
+        correct_action: hold
+        partial_credit:
+          escalate: 0.6
+          flag: 0.4
+        requires_investigation:
+          - contact_sender
+          - request_docs
+        regulatory_action: false
+        key_flags:
+          - bank_detail_change
+          - first_time_payee
+    - task_id: MED-008
+      difficulty: medium
+      grader:
+        type: action_match
+        correct_action: flag
+        partial_credit:
+          hold: 0.6
+          escalate: 0.4
+        requires_investigation:
+          - verify_kyc
+        regulatory_action: false
+        key_flags:
+          - thin_credit_file
+          - new_account
+    - task_id: HARD-001
+      difficulty: hard
+      grader:
+        type: action_match
+        correct_action: escalate
+        partial_credit:
+          flag: 0.6
+          hold: 0.5
+          reject: 0.3
+        requires_investigation:
+          - inspect
+        regulatory_action: false
+        key_flags:
+          - solicitor_mule_pattern
+    - task_id: HARD-002
+      difficulty: hard
+      grader:
+        type: action_match
+        correct_action: reject
+        partial_credit:
+          escalate: 0.6
+          hold: 0.5
+          flag: 0.3
+        requires_investigation:
+          - contact_sender
+        regulatory_action: false
+        key_flags:
+          - app_scam_indicator
+          - mule_account_pattern
+    - task_id: HARD-003
+      difficulty: hard
+      grader:
+        type: action_match
+        correct_action: reject
+        partial_credit:
+          escalate: 0.5
+          flag: 0.2
+        requires_investigation:
+          - inspect
+        regulatory_action: true
+        key_flags:
+          - structuring_pattern
+          - ctr_threshold_avoidance
+    - task_id: HARD-004
+      difficulty: hard
+      grader:
+        type: action_match
+        correct_action: approve
+        partial_credit:
+          escalate: 0.5
+          hold: 0.4
+          flag: 0.3
+        requires_investigation:
+          - inspect
+        regulatory_action: false
+        key_flags:
+          - fx_settlement
+    - task_id: HARD-005
+      difficulty: hard
+      grader:
+        type: action_match
+        correct_action: escalate
+        partial_credit:
+          flag: 0.5
+          hold: 0.4
+          reject: 0.3
+        requires_investigation:
+          - contact_sender
+          - inspect
+        regulatory_action: false
+        key_flags:
+          - internal_to_personal
+          - unusual_beneficiary
+    - task_id: HARD-006
+      difficulty: hard
+      grader:
+        type: action_match
+        correct_action: flag
+        partial_credit:
+          hold: 0.6
+          escalate: 0.5
+        requires_investigation:
+          - inspect
+        regulatory_action: false
+        key_flags:
+          - dormant_receiver
+          - sudden_activity
+    - task_id: HARD-007
+      difficulty: hard
+      grader:
+        type: action_match
+        correct_action: reject
+        partial_credit:
+          hold: 0.5
+          escalate: 0.4
+          flag: 0.3
+        requires_investigation:
+          - contact_sender
+          - inspect
+        regulatory_action: false
+        key_flags:
+          - sim_swap_detected
+          - new_withdrawal_address
+    - task_id: HARD-008
+      difficulty: hard
+      grader:
+        type: action_match
+        correct_action: reject
+        partial_credit:
+          hold: 0.5
+          escalate: 0.4
+          flag: 0.3
+        requires_investigation:
+          - contact_sender
+          - inspect
+        regulatory_action: false
+        key_flags:
+          - romance_scam_indicator
+          - escalating_transfers
+    - task_id: HARD-009
+      difficulty: hard
+      grader:
+        type: action_match
+        correct_action: escalate
+        partial_credit:
+          hold: 0.5
+          flag: 0.4
+          reject: 0.3
+        requires_investigation:
+          - inspect
+          - verify_kyc
+        regulatory_action: false
+        key_flags:
+          - new_account_10d
+          - perfect_score_anomaly
+    - task_id: HARD-010
+      difficulty: hard
+      grader:
+        type: action_match
+        correct_action: reject
+        partial_credit:
+          hold: 0.5
+          escalate: 0.4
+          flag: 0.3
+        requires_investigation:
+          - contact_sender
+          - inspect
+        regulatory_action: false
+        key_flags:
+          - direct_deposit_changed
+          - payroll_diversion_indicator
+    - task_id: CRIT-001
+      difficulty: critical
+      grader:
+        type: action_match
+        correct_action: approve
+        partial_credit:
+          escalate: 0.5
+          hold: 0.4
+          flag: 0.3
+        requires_investigation:
+          - inspect
+          - request_docs
+        regulatory_action: false
+        key_flags:
+          - first_time_payee
+          - new_counterparty
+    - task_id: CRIT-002
+      difficulty: critical
+      grader:
+        type: action_match
+        correct_action: reject
+        partial_credit:
+          escalate: 0.4
+          flag: 0.2
+        requires_investigation:
+          - inspect
+        regulatory_action: true
+        key_flags:
+          - fraud_ring_indicator
+          - coordinated_transfers
+    - task_id: CRIT-003
+      difficulty: critical
+      grader:
+        type: action_match
+        correct_action: escalate
+        partial_credit:
+          flag: 0.4
+          hold: 0.35
+          reject: 0.3
+        requires_investigation:
+          - inspect
+          - request_docs
+        regulatory_action: true
+        key_flags:
+          - invoice_mismatch
+          - trade_finance
+    - task_id: CRIT-004
+      difficulty: critical
+      grader:
+        type: action_match
+        correct_action: reject
+        partial_credit:
+          escalate: 0.5
+          hold: 0.4
+        requires_investigation:
+          - contact_sender
+          - inspect
+        regulatory_action: false
+        key_flags:
+          - geo_impossible_login
+          - account_takeover_indicator
+    - task_id: CRIT-005
+      difficulty: critical
+      grader:
+        type: action_match
+        correct_action: reject
+        partial_credit:
+          escalate: 0.5
+          hold: 0.4
+        requires_investigation:
+          - inspect
+          - request_docs
+          - verify_kyc
+        regulatory_action: true
+        key_flags:
+          - shell_company_indicator
+          - sanctions_adjacent
+    - task_id: CRIT-006
+      difficulty: critical
+      grader:
+        type: action_match
+        correct_action: escalate
+        partial_credit:
+          hold: 0.5
+          reject: 0.4
+        requires_investigation:
+          - inspect
+          - request_docs
+        regulatory_action: true
+        key_flags:
+          - fincen_311_alert
+          - correspondent_risk
 
 # ── Budget ───────────────────────────────────────────────────────────────────
 budget:
