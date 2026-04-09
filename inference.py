@@ -221,7 +221,9 @@ def run_inference() -> tuple:
     if not _API_KEY:
         print("ERROR: Set OPENAI_API_KEY (or HF_TOKEN) with your API credential.", file=sys.stderr)
         sys.exit(1)
-    missing = [v for v in ("API_BASE_URL", "MODEL_NAME") if not os.environ.get(v)]
+    # Validate using the resolved Python variables (which already have defaults applied),
+    # not os.environ.get() — so missing env vars don't cause a false failure.
+    missing = [name for name, val in (("API_BASE_URL", API_BASE_URL), ("MODEL_NAME", MODEL_NAME)) if not val]
     if missing:
         print(f"ERROR: Missing required environment variables: {', '.join(missing)}", file=sys.stderr)
         sys.exit(1)
