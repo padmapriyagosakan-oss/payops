@@ -337,24 +337,32 @@ def grade_episode(
     # Strict [0, 1] clamp — grader can NEVER exceed 1.0 or go below 0.0
     normalised = max(0.0, min(1.0, total / max_possible)) if max_possible > 0 else 0.0
 
+    # Build per-task rewards with grader config included.
+    # zip is safe because per_task_details always has exactly len(tasks) entries
+    # (the while-loop above fills in any tasks the agent never reached).
+    per_task_rewards = [
+        {
+            "task_id":           d.task_id,
+            "difficulty":        d.difficulty,
+            "weight":            d.weight,
+            "terminal_action":   d.terminal_action,
+            "correct_action":    d.correct_action,
+            "investigation_used":d.investigation_actions_used,
+            "correct":           d.correct,
+            "reward_breakdown":  d.reward_breakdown,
+            "weighted_reward":   d.total_reward,
+            # Grader config: lets platform validators (and server/app.py) find
+            # grader definitions per task without needing a separate API call.
+            "grader":            t.grader,
+        }
+        for d, t in zip(per_task_details, tasks)
+    ]
+
     return EpisodeResult(
         total_reward=round(total, 4),
         max_possible_reward=round(max_possible, 4),
         normalised_score=round(normalised, 4),
-        per_task_rewards=[
-            {
-                "task_id":           d.task_id,
-                "difficulty":        d.difficulty,
-                "weight":            d.weight,
-                "terminal_action":   d.terminal_action,
-                "correct_action":    d.correct_action,
-                "investigation_used":d.investigation_actions_used,
-                "correct":           d.correct,
-                "reward_breakdown":  d.reward_breakdown,
-                "weighted_reward":   d.total_reward,
-            }
-            for d in per_task_details
-        ],
+        per_task_rewards=per_task_rewards,
         budget_spent=round(budget_spent, 4),
         budget_overspend=round(budget_overspend, 4),
         budget_penalty=budget_penalty,
