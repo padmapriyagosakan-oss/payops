@@ -309,6 +309,26 @@ async def grader():
             return _catalog()
 
         result = grade_episode(sess["actions"], sess["tasks"], sess["confs"])
+        # Build task lookup so we can attach the grader config to every per_task
+        # entry — the platform validator checks for the "grader" key whether the
+        # endpoint is called cold OR after an episode has been played.
+        tasks_by_id = {t.task_id: t for t in sess["tasks"]}
+
+    per_task = []
+    for pt in result.per_task_rewards:
+        entry = dict(pt)
+        t = tasks_by_id.get(pt["task_id"])
+        if t:
+            entry["grader"] = {
+                "type":                  "action_match",
+                "correct_action":        t.correct_action,
+                "partial_credit":        dict(getattr(t, "partial_credit_actions", {})),
+                "requires_investigation": list(getattr(t, "requires_investigation", [])),
+                "regulatory_action":     getattr(t, "regulatory_action", False),
+                "key_flags":             list(getattr(t, "key_flags", [])),
+            }
+        per_task.append(entry)
+
     return {
         "total_reward":       result.total_reward,
         "max_possible_reward":result.max_possible_reward,
@@ -317,7 +337,7 @@ async def grader():
         "budget_overspend":   result.budget_overspend,
         "budget_penalty":     result.budget_penalty,
         "passed":             result.passed,
-        "per_task":           result.per_task_rewards,
+        "per_task":           per_task,
     }
 
 
