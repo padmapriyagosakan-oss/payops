@@ -267,14 +267,39 @@ async def tasks():
 async def grader():
     """
     Grade the episode using all actions taken since the last /reset.
+    When called with no prior actions (e.g. by platform validators), returns
+    the grader catalog — one entry per task — with normalised_score=0.0.
     """
     async with _state_lock:
         sess = _current_session()
         if not sess["actions"]:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "No actions recorded. Run /reset then /step first."},
-            )
+            # Return grader catalog so platform validators can confirm graders exist
+            per_task_catalog = [
+                {
+                    "task_id":        t.task_id,
+                    "difficulty":     t.difficulty,
+                    "grader": {
+                        "type":                  "action_match",
+                        "correct_action":        t.correct_action,
+                        "partial_credit":        dict(getattr(t, "partial_credit_actions", {})),
+                        "requires_investigation": list(getattr(t, "requires_investigation", [])),
+                        "regulatory_action":     getattr(t, "regulatory_action", False),
+                        "key_flags":             list(getattr(t, "key_flags", [])),
+                    },
+                }
+                for t in TASKS
+            ]
+            return {
+                "total_reward":        0.0,
+                "max_possible_reward": 0.0,
+                "normalised_score":    0.0,
+                "budget_spent":        0.0,
+                "budget_overspend":    0.0,
+                "budget_penalty":      0.0,
+                "passed":              False,
+                "per_task":            per_task_catalog,
+                "message":             "No episode in progress. Showing grader catalog.",
+            }
         result = grade_episode(sess["actions"], sess["tasks"], sess["confs"])
     return {
         "total_reward":       result.total_reward,
