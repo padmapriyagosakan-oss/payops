@@ -250,6 +250,14 @@ async def tasks():
                 "requires_investigation": list(getattr(t, "requires_investigation", [])),
                 "regulatory_action": getattr(t, "regulatory_action", False),
                 "chain_total":     getattr(t, "chain_total", 1),
+                "grader": {
+                    "type":                  "action_match",
+                    "correct_action":        t.correct_action,
+                    "partial_credit":        dict(getattr(t, "partial_credit_actions", {})),
+                    "requires_investigation": list(getattr(t, "requires_investigation", [])),
+                    "regulatory_action":     getattr(t, "regulatory_action", False),
+                    "key_flags":             list(getattr(t, "key_flags", [])),
+                },
             }
         )
     return {"count": len(result), "tasks": result}
