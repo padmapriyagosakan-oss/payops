@@ -52,8 +52,8 @@ except ImportError:
 
 # ── Config ─────────────────────────────────────────────────────────────────
 
-API_BASE_URL: str    = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1").rstrip("/")
-MODEL_NAME: str      = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+API_BASE_URL: str    = (os.environ.get("API_BASE_URL") or "https://router.huggingface.co/v1").rstrip("/")
+MODEL_NAME: str      = os.environ.get("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
 # OPENAI_API_KEY is the spec-standard credential; HF_TOKEN is the HF-native alias.
 # OPENAI_API_KEY takes precedence when both are set.
 OPENAI_API_KEY: str  = os.environ.get("OPENAI_API_KEY", "")
@@ -221,12 +221,8 @@ def run_inference() -> tuple:
     if not _API_KEY:
         print("ERROR: Set OPENAI_API_KEY (or HF_TOKEN) with your API credential.", file=sys.stderr)
         sys.exit(1)
-    # Validate using the resolved Python variables (which already have defaults applied),
-    # not os.environ.get() — so missing env vars don't cause a false failure.
-    missing = [name for name, val in (("API_BASE_URL", API_BASE_URL), ("MODEL_NAME", MODEL_NAME)) if not val]
-    if missing:
-        print(f"ERROR: Missing required environment variables: {', '.join(missing)}", file=sys.stderr)
-        sys.exit(1)
+    # API_BASE_URL and MODEL_NAME always have built-in defaults (via 'or' fallback above).
+    # Only HF_TOKEN / OPENAI_API_KEY genuinely requires the caller to supply a value.
 
     print(f"PayOps Inference", file=sys.stderr)
     print(f"  Model      : {MODEL_NAME}", file=sys.stderr)
