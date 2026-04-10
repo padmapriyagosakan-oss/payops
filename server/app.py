@@ -260,7 +260,10 @@ async def tasks():
                 },
             }
         )
-    return {"count": len(result), "tasks": result}
+    # Return a flat list so the platform can iterate task objects directly.
+    # (A dict response like {"count":...,"tasks":[...]} causes iteration over
+    # dict keys rather than task objects, making grader detection fail.)
+    return result
 
 
 @app.get("/grader", summary="Grade the current episode")
