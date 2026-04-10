@@ -131,6 +131,7 @@ tasks:
   - task_id: EASY-001
     difficulty: easy
     grader:
+      enabled: true
       type: action_match
       correct_action: approve
       partial_credit: {}
@@ -140,6 +141,7 @@ tasks:
   - task_id: EASY-002
     difficulty: easy
     grader:
+      enabled: true
       type: action_match
       correct_action: reject
       partial_credit:
@@ -152,6 +154,7 @@ tasks:
   - task_id: EASY-003
     difficulty: easy
     grader:
+      enabled: true
       type: action_match
       correct_action: approve
       partial_credit: {}
@@ -161,6 +164,7 @@ tasks:
   - task_id: EASY-004
     difficulty: easy
     grader:
+      enabled: true
       type: action_match
       correct_action: flag
       partial_credit:
@@ -173,6 +177,7 @@ tasks:
   - task_id: EASY-005
     difficulty: easy
     grader:
+      enabled: true
       type: action_match
       correct_action: approve
       partial_credit: {}
@@ -182,6 +187,7 @@ tasks:
   - task_id: EASY-006
     difficulty: easy
     grader:
+      enabled: true
       type: action_match
       correct_action: flag
       partial_credit:
@@ -193,6 +199,7 @@ tasks:
   - task_id: MED-001
     difficulty: medium
     grader:
+      enabled: true
       type: action_match
       correct_action: escalate
       partial_credit:
@@ -207,6 +214,7 @@ tasks:
   - task_id: MED-002
     difficulty: medium
     grader:
+      enabled: true
       type: action_match
       correct_action: hold
       partial_credit:
@@ -220,6 +228,7 @@ tasks:
   - task_id: MED-003
     difficulty: medium
     grader:
+      enabled: true
       type: action_match
       correct_action: flag
       partial_credit:
@@ -233,6 +242,7 @@ tasks:
   - task_id: MED-004
     difficulty: medium
     grader:
+      enabled: true
       type: action_match
       correct_action: flag
       partial_credit:
@@ -245,6 +255,7 @@ tasks:
   - task_id: MED-005
     difficulty: medium
     grader:
+      enabled: true
       type: action_match
       correct_action: hold
       partial_credit:
@@ -258,6 +269,7 @@ tasks:
   - task_id: MED-006
     difficulty: medium
     grader:
+      enabled: true
       type: action_match
       correct_action: escalate
       partial_credit:
@@ -272,6 +284,7 @@ tasks:
   - task_id: MED-007
     difficulty: medium
     grader:
+      enabled: true
       type: action_match
       correct_action: hold
       partial_credit:
@@ -287,6 +300,7 @@ tasks:
   - task_id: MED-008
     difficulty: medium
     grader:
+      enabled: true
       type: action_match
       correct_action: flag
       partial_credit:
@@ -301,6 +315,7 @@ tasks:
   - task_id: HARD-001
     difficulty: hard
     grader:
+      enabled: true
       type: action_match
       correct_action: escalate
       partial_credit:
@@ -315,6 +330,7 @@ tasks:
   - task_id: HARD-002
     difficulty: hard
     grader:
+      enabled: true
       type: action_match
       correct_action: reject
       partial_credit:
@@ -330,6 +346,7 @@ tasks:
   - task_id: HARD-003
     difficulty: hard
     grader:
+      enabled: true
       type: action_match
       correct_action: reject
       partial_credit:
@@ -344,6 +361,7 @@ tasks:
   - task_id: HARD-004
     difficulty: hard
     grader:
+      enabled: true
       type: action_match
       correct_action: approve
       partial_credit:
@@ -358,6 +376,7 @@ tasks:
   - task_id: HARD-005
     difficulty: hard
     grader:
+      enabled: true
       type: action_match
       correct_action: escalate
       partial_credit:
@@ -374,6 +393,7 @@ tasks:
   - task_id: HARD-006
     difficulty: hard
     grader:
+      enabled: true
       type: action_match
       correct_action: flag
       partial_credit:
@@ -388,6 +408,7 @@ tasks:
   - task_id: HARD-007
     difficulty: hard
     grader:
+      enabled: true
       type: action_match
       correct_action: reject
       partial_credit:
@@ -404,6 +425,7 @@ tasks:
   - task_id: HARD-008
     difficulty: hard
     grader:
+      enabled: true
       type: action_match
       correct_action: reject
       partial_credit:
@@ -420,6 +442,7 @@ tasks:
   - task_id: HARD-009
     difficulty: hard
     grader:
+      enabled: true
       type: action_match
       correct_action: escalate
       partial_credit:
@@ -436,6 +459,7 @@ tasks:
   - task_id: HARD-010
     difficulty: hard
     grader:
+      enabled: true
       type: action_match
       correct_action: reject
       partial_credit:
@@ -452,6 +476,7 @@ tasks:
   - task_id: CRIT-001
     difficulty: critical
     grader:
+      enabled: true
       type: action_match
       correct_action: approve
       partial_credit:
@@ -468,6 +493,7 @@ tasks:
   - task_id: CRIT-002
     difficulty: critical
     grader:
+      enabled: true
       type: action_match
       correct_action: reject
       partial_credit:
@@ -482,6 +508,7 @@ tasks:
   - task_id: CRIT-003
     difficulty: critical
     grader:
+      enabled: true
       type: action_match
       correct_action: escalate
       partial_credit:
@@ -498,6 +525,7 @@ tasks:
   - task_id: CRIT-004
     difficulty: critical
     grader:
+      enabled: true
       type: action_match
       correct_action: reject
       partial_credit:
@@ -513,6 +541,7 @@ tasks:
   - task_id: CRIT-005
     difficulty: critical
     grader:
+      enabled: true
       type: action_match
       correct_action: reject
       partial_credit:
@@ -529,6 +558,7 @@ tasks:
   - task_id: CRIT-006
     difficulty: critical
     grader:
+      enabled: true
       type: action_match
       correct_action: escalate
       partial_credit:

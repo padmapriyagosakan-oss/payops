@@ -251,6 +251,7 @@ async def tasks():
                 "regulatory_action": getattr(t, "regulatory_action", False),
                 "chain_total":     getattr(t, "chain_total", 1),
                 "grader": {
+                    "enabled":               True,
                     "type":                  "action_match",
                     "correct_action":        t.correct_action,
                     "partial_credit":        dict(getattr(t, "partial_credit_actions", {})),
@@ -260,10 +261,7 @@ async def tasks():
                 },
             }
         )
-    # Return a flat list so the platform can iterate task objects directly.
-    # (A dict response like {"count":...,"tasks":[...]} causes iteration over
-    # dict keys rather than task objects, making grader detection fail.)
-    return result
+    return {"count": len(result), "tasks": result}
 
 
 @app.get("/grader", summary="Grade the current episode")
@@ -290,6 +288,7 @@ async def grader():
                         "task_id":   t.task_id,
                         "difficulty": t.difficulty,
                         "grader": {
+                            "enabled":               True,
                             "type":                  "action_match",
                             "correct_action":        t.correct_action,
                             "partial_credit":        dict(getattr(t, "partial_credit_actions", {})),
@@ -300,8 +299,22 @@ async def grader():
                     }
                     for t in TASKS
                 ],
-                "message": "No episode in progress. Showing grader catalog.",
-            }
+                "message": "No episode in progress. Showing grader catalog.",                \"per_task_rewards\": [
+                    {
+                        \"task_id\":   t.task_id,
+                        \"difficulty\": t.difficulty,
+                        \"grader\": {
+                            \"enabled\":               True,
+                            \"type\":                  \"action_match\",
+                            \"correct_action\":        t.correct_action,
+                            \"partial_credit\":        dict(getattr(t, \"partial_credit_actions\", {})),
+                            \"requires_investigation\": list(getattr(t, \"requires_investigation\", [])),
+                            \"regulatory_action\":     getattr(t, \"regulatory_action\", False),
+                            \"key_flags\":             list(getattr(t, \"key_flags\", [])),
+                        },
+                    }
+                    for t in TASKS
+                ],            }
 
         # No session at all — return catalog instead of raising 400
         if _current_session_id is None or _current_session_id not in _sessions:
@@ -323,6 +336,7 @@ async def grader():
         t = tasks_by_id.get(pt["task_id"])
         if t:
             entry["grader"] = {
+                "enabled":               True,
                 "type":                  "action_match",
                 "correct_action":        t.correct_action,
                 "partial_credit":        dict(getattr(t, "partial_credit_actions", {})),
@@ -341,6 +355,7 @@ async def grader():
         "budget_penalty":     result.budget_penalty,
         "passed":             result.passed,
         "per_task":           per_task,
+        "per_task_rewards":   per_task,
     }
 
 

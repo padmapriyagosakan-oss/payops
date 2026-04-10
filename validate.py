@@ -358,7 +358,7 @@ def check_server(base_url: str):
     # tasks
     try:
         tasks = http_get(f"{base_url}/tasks")
-        count = len(tasks) if isinstance(tasks, list) else tasks.get("count", 0)
+        count = tasks.get("count", 0) if isinstance(tasks, dict) else len(tasks)
         if count >= 3:
             ok(f"GET /tasks → count={count} (>= 3 required)")
         else:
