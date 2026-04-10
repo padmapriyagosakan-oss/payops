@@ -115,6 +115,7 @@ class PayOpsTask:
         ``TASKS`` from tasks.py can discover grader configs via ``task.grader``.
         """
         return {
+            "enabled": True,
             "type": "action_match",
             "correct_action": self.correct_action,
             "partial_credit": dict(self.partial_credit_actions),
