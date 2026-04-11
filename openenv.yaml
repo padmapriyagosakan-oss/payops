@@ -126,451 +126,128 @@ task_difficulty_weights:
   hard: 1.5
   critical: 2.0
 
-# tasks: flat list — platform iterates this directly for grader check
+# tasks: grader field points to a Python callable (module:Class format)
 tasks:
-  - task_id: EASY-001
+  - id: EASY-001
+    name: "EASY-001"
     difficulty: easy
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: approve
-      partial_credit: {}
-      requires_investigation: []
-      regulatory_action: false
-      key_flags: []
-  - task_id: EASY-002
+    grader: payops_env.server.graders:EASY001Grader
+  - id: EASY-002
+    name: "EASY-002"
     difficulty: easy
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: reject
-      partial_credit:
-        escalate: 0.4
-      requires_investigation: []
-      regulatory_action: false
-      key_flags:
-        - sanctioned_country
-        - unknown_sender
-  - task_id: EASY-003
+    grader: payops_env.server.graders:EASY002Grader
+  - id: EASY-003
+    name: "EASY-003"
     difficulty: easy
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: approve
-      partial_credit: {}
-      requires_investigation: []
-      regulatory_action: false
-      key_flags: []
-  - task_id: EASY-004
+    grader: payops_env.server.graders:EASY003Grader
+  - id: EASY-004
+    name: "EASY-004"
     difficulty: easy
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: flag
-      partial_credit:
-        escalate: 0.6
-        hold: 0.5
-      requires_investigation: []
-      regulatory_action: false
-      key_flags:
-        - velocity_breach
-  - task_id: EASY-005
+    grader: payops_env.server.graders:EASY004Grader
+  - id: EASY-005
+    name: "EASY-005"
     difficulty: easy
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: approve
-      partial_credit: {}
-      requires_investigation: []
-      regulatory_action: false
-      key_flags: []
-  - task_id: EASY-006
+    grader: payops_env.server.graders:EASY005Grader
+  - id: EASY-006
+    name: "EASY-006"
     difficulty: easy
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: flag
-      partial_credit:
-        hold: 0.6
-      requires_investigation: []
-      regulatory_action: false
-      key_flags:
-        - duplicate_transaction
-  - task_id: MED-001
+    grader: payops_env.server.graders:EASY006Grader
+  - id: MED-001
+    name: "MED-001"
     difficulty: medium
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: escalate
-      partial_credit:
-        flag: 0.5
-        hold: 0.4
-      requires_investigation:
-        - inspect
-      regulatory_action: false
-      key_flags:
-        - cross_border
-        - high_value
-  - task_id: MED-002
+    grader: payops_env.server.graders:MED001Grader
+  - id: MED-002
+    name: "MED-002"
     difficulty: medium
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: hold
-      partial_credit:
-        escalate: 0.6
-        flag: 0.4
-      requires_investigation:
-        - verify_kyc
-      regulatory_action: false
-      key_flags:
-        - kyc_expiry_90d
-  - task_id: MED-003
+    grader: payops_env.server.graders:MED002Grader
+  - id: MED-003
+    name: "MED-003"
     difficulty: medium
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: flag
-      partial_credit:
-        hold: 0.5
-        escalate: 0.3
-      requires_investigation: []
-      regulatory_action: false
-      key_flags:
-        - amount_spike
-        - pattern_deviation
-  - task_id: MED-004
+    grader: payops_env.server.graders:MED003Grader
+  - id: MED-004
+    name: "MED-004"
     difficulty: medium
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: flag
-      partial_credit:
-        escalate: 0.5
-        hold: 0.4
-      requires_investigation: []
-      regulatory_action: false
-      key_flags:
-        - crypto_exchange
-  - task_id: MED-005
+    grader: payops_env.server.graders:MED004Grader
+  - id: MED-005
+    name: "MED-005"
     difficulty: medium
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: hold
-      partial_credit:
-        flag: 0.5
-        escalate: 0.4
-      requires_investigation:
-        - verify_kyc
-      regulatory_action: false
-      key_flags:
-        - kyc_expired
-  - task_id: MED-006
+    grader: payops_env.server.graders:MED005Grader
+  - id: MED-006
+    name: "MED-006"
     difficulty: medium
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: escalate
-      partial_credit:
-        flag: 0.4
-        hold: 0.5
-      requires_investigation:
-        - request_docs
-      regulatory_action: false
-      key_flags:
-        - first_time_payee
-        - large_first_transfer
-  - task_id: MED-007
+    grader: payops_env.server.graders:MED006Grader
+  - id: MED-007
+    name: "MED-007"
     difficulty: medium
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: hold
-      partial_credit:
-        escalate: 0.6
-        flag: 0.4
-      requires_investigation:
-        - contact_sender
-        - request_docs
-      regulatory_action: false
-      key_flags:
-        - bank_detail_change
-        - first_time_payee
-  - task_id: MED-008
+    grader: payops_env.server.graders:MED007Grader
+  - id: MED-008
+    name: "MED-008"
     difficulty: medium
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: flag
-      partial_credit:
-        hold: 0.6
-        escalate: 0.4
-      requires_investigation:
-        - verify_kyc
-      regulatory_action: false
-      key_flags:
-        - thin_credit_file
-        - new_account
-  - task_id: HARD-001
+    grader: payops_env.server.graders:MED008Grader
+  - id: HARD-001
+    name: "HARD-001"
     difficulty: hard
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: escalate
-      partial_credit:
-        flag: 0.6
-        hold: 0.5
-        reject: 0.3
-      requires_investigation:
-        - inspect
-      regulatory_action: false
-      key_flags:
-        - solicitor_mule_pattern
-  - task_id: HARD-002
+    grader: payops_env.server.graders:HARD001Grader
+  - id: HARD-002
+    name: "HARD-002"
     difficulty: hard
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: reject
-      partial_credit:
-        escalate: 0.6
-        hold: 0.5
-        flag: 0.3
-      requires_investigation:
-        - contact_sender
-      regulatory_action: false
-      key_flags:
-        - app_scam_indicator
-        - mule_account_pattern
-  - task_id: HARD-003
+    grader: payops_env.server.graders:HARD002Grader
+  - id: HARD-003
+    name: "HARD-003"
     difficulty: hard
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: reject
-      partial_credit:
-        escalate: 0.5
-        flag: 0.2
-      requires_investigation:
-        - inspect
-      regulatory_action: true
-      key_flags:
-        - structuring_pattern
-        - ctr_threshold_avoidance
-  - task_id: HARD-004
+    grader: payops_env.server.graders:HARD003Grader
+  - id: HARD-004
+    name: "HARD-004"
     difficulty: hard
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: approve
-      partial_credit:
-        escalate: 0.5
-        hold: 0.4
-        flag: 0.3
-      requires_investigation:
-        - inspect
-      regulatory_action: false
-      key_flags:
-        - fx_settlement
-  - task_id: HARD-005
+    grader: payops_env.server.graders:HARD004Grader
+  - id: HARD-005
+    name: "HARD-005"
     difficulty: hard
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: escalate
-      partial_credit:
-        flag: 0.5
-        hold: 0.4
-        reject: 0.3
-      requires_investigation:
-        - contact_sender
-        - inspect
-      regulatory_action: false
-      key_flags:
-        - internal_to_personal
-        - unusual_beneficiary
-  - task_id: HARD-006
+    grader: payops_env.server.graders:HARD005Grader
+  - id: HARD-006
+    name: "HARD-006"
     difficulty: hard
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: flag
-      partial_credit:
-        hold: 0.6
-        escalate: 0.5
-      requires_investigation:
-        - inspect
-      regulatory_action: false
-      key_flags:
-        - dormant_receiver
-        - sudden_activity
-  - task_id: HARD-007
+    grader: payops_env.server.graders:HARD006Grader
+  - id: HARD-007
+    name: "HARD-007"
     difficulty: hard
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: reject
-      partial_credit:
-        hold: 0.5
-        escalate: 0.4
-        flag: 0.3
-      requires_investigation:
-        - contact_sender
-        - inspect
-      regulatory_action: false
-      key_flags:
-        - sim_swap_detected
-        - new_withdrawal_address
-  - task_id: HARD-008
+    grader: payops_env.server.graders:HARD007Grader
+  - id: HARD-008
+    name: "HARD-008"
     difficulty: hard
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: reject
-      partial_credit:
-        hold: 0.5
-        escalate: 0.4
-        flag: 0.3
-      requires_investigation:
-        - contact_sender
-        - inspect
-      regulatory_action: false
-      key_flags:
-        - romance_scam_indicator
-        - escalating_transfers
-  - task_id: HARD-009
+    grader: payops_env.server.graders:HARD008Grader
+  - id: HARD-009
+    name: "HARD-009"
     difficulty: hard
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: escalate
-      partial_credit:
-        hold: 0.5
-        flag: 0.4
-        reject: 0.3
-      requires_investigation:
-        - inspect
-        - verify_kyc
-      regulatory_action: false
-      key_flags:
-        - new_account_10d
-        - perfect_score_anomaly
-  - task_id: HARD-010
+    grader: payops_env.server.graders:HARD009Grader
+  - id: HARD-010
+    name: "HARD-010"
     difficulty: hard
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: reject
-      partial_credit:
-        hold: 0.5
-        escalate: 0.4
-        flag: 0.3
-      requires_investigation:
-        - contact_sender
-        - inspect
-      regulatory_action: false
-      key_flags:
-        - direct_deposit_changed
-        - payroll_diversion_indicator
-  - task_id: CRIT-001
+    grader: payops_env.server.graders:HARD010Grader
+  - id: CRIT-001
+    name: "CRIT-001"
     difficulty: critical
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: approve
-      partial_credit:
-        escalate: 0.5
-        hold: 0.4
-        flag: 0.3
-      requires_investigation:
-        - inspect
-        - request_docs
-      regulatory_action: false
-      key_flags:
-        - first_time_payee
-        - new_counterparty
-  - task_id: CRIT-002
+    grader: payops_env.server.graders:CRIT001Grader
+  - id: CRIT-002
+    name: "CRIT-002"
     difficulty: critical
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: reject
-      partial_credit:
-        escalate: 0.4
-        flag: 0.2
-      requires_investigation:
-        - inspect
-      regulatory_action: true
-      key_flags:
-        - fraud_ring_indicator
-        - coordinated_transfers
-  - task_id: CRIT-003
+    grader: payops_env.server.graders:CRIT002Grader
+  - id: CRIT-003
+    name: "CRIT-003"
     difficulty: critical
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: escalate
-      partial_credit:
-        flag: 0.4
-        hold: 0.35
-        reject: 0.3
-      requires_investigation:
-        - inspect
-        - request_docs
-      regulatory_action: true
-      key_flags:
-        - invoice_mismatch
-        - trade_finance
-  - task_id: CRIT-004
+    grader: payops_env.server.graders:CRIT003Grader
+  - id: CRIT-004
+    name: "CRIT-004"
     difficulty: critical
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: reject
-      partial_credit:
-        escalate: 0.5
-        hold: 0.4
-      requires_investigation:
-        - contact_sender
-        - inspect
-      regulatory_action: false
-      key_flags:
-        - geo_impossible_login
-        - account_takeover_indicator
-  - task_id: CRIT-005
+    grader: payops_env.server.graders:CRIT004Grader
+  - id: CRIT-005
+    name: "CRIT-005"
     difficulty: critical
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: reject
-      partial_credit:
-        escalate: 0.5
-        hold: 0.4
-      requires_investigation:
-        - inspect
-        - request_docs
-        - verify_kyc
-      regulatory_action: true
-      key_flags:
-        - shell_company_indicator
-        - sanctions_adjacent
-  - task_id: CRIT-006
+    grader: payops_env.server.graders:CRIT005Grader
+  - id: CRIT-006
+    name: "CRIT-006"
     difficulty: critical
-    grader:
-      enabled: true
-      type: action_match
-      correct_action: escalate
-      partial_credit:
-        hold: 0.5
-        reject: 0.4
-      requires_investigation:
-        - inspect
-        - request_docs
-      regulatory_action: true
-      key_flags:
-        - fincen_311_alert
-        - correspondent_risk
+    grader: payops_env.server.graders:CRIT006Grader
 
 # ── Budget ───────────────────────────────────────────────────────────────────
 budget:

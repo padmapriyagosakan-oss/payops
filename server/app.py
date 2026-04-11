@@ -299,22 +299,24 @@ async def grader():
                     }
                     for t in TASKS
                 ],
-                "message": "No episode in progress. Showing grader catalog.",                \"per_task_rewards\": [
+                "message": "No episode in progress. Showing grader catalog.",
+                "per_task_rewards": [
                     {
-                        \"task_id\":   t.task_id,
-                        \"difficulty\": t.difficulty,
-                        \"grader\": {
-                            \"enabled\":               True,
-                            \"type\":                  \"action_match\",
-                            \"correct_action\":        t.correct_action,
-                            \"partial_credit\":        dict(getattr(t, \"partial_credit_actions\", {})),
-                            \"requires_investigation\": list(getattr(t, \"requires_investigation\", [])),
-                            \"regulatory_action\":     getattr(t, \"regulatory_action\", False),
-                            \"key_flags\":             list(getattr(t, \"key_flags\", [])),
+                        "task_id":   t.task_id,
+                        "difficulty": t.difficulty,
+                        "grader": {
+                            "enabled":               True,
+                            "type":                  "action_match",
+                            "correct_action":        t.correct_action,
+                            "partial_credit":        dict(getattr(t, "partial_credit_actions", {})),
+                            "requires_investigation": list(getattr(t, "requires_investigation", [])),
+                            "regulatory_action":     getattr(t, "regulatory_action", False),
+                            "key_flags":             list(getattr(t, "key_flags", [])),
                         },
                     }
                     for t in TASKS
-                ],            }
+                ],
+            }
 
         # No session at all — return catalog instead of raising 400
         if _current_session_id is None or _current_session_id not in _sessions:
