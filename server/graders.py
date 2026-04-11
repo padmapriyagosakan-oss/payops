@@ -2,33 +2,38 @@
 Grader callables for PayOps OpenEnv tasks.
 
 Each class is referenced from openenv.yaml as:
-    payops_env.server.graders:EASY001Grader
+    server.graders:EASY001Grader
 
-The platform reads the grader field from openenv.yaml, imports the class,
-and uses it to grade agent actions.  Each grader is a callable that accepts
-an action string and returns a float reward in [0.0, 1.0].
+The platform imports the class and calls it with an action string.
+Return type is {"score": float, "feedback": str} as required by the platform validator.
 """
 from __future__ import annotations
 
 
 class _BaseGrader:
-    """Base grader: correct action → 1.0, partial credit if configured, else 0.0."""
+    """Base grader: returns {"score": float, "feedback": str} as required by the platform validator."""
 
     task_id: str = ""
 
-    def grade(self, action: str, **kwargs) -> float:
+    def grade(self, action: str, **kwargs):
         from payops_env.tasks import TASKS_BY_ID  # lazy import avoids circular deps
 
         t = TASKS_BY_ID.get(self.task_id)
         if t is None:
-            return 0.0
+            return {"score": 0.0, "feedback": "Task not found"}
+
         if action == t.correct_action:
-            return 1.0
-        return float(
+            return {"score": 1.0, "feedback": "Correct action"}
+
+        partial = float(
             dict(getattr(t, "partial_credit_actions", {})).get(action, 0.0)
         )
+        return {
+            "score": partial,
+            "feedback": "Partial credit" if partial > 0 else "Incorrect action",
+        }
 
-    def __call__(self, action: str, **kwargs) -> float:
+    def __call__(self, action: str, **kwargs):
         return self.grade(action, **kwargs)
 
 
