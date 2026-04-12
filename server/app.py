@@ -45,7 +45,7 @@ app = FastAPI(
         "Payment Operations Incident Response environment. "
         "An AI agent reviews financial transactions and decides how to handle them."
     ),
-    version="2.0.0",
+    version="2.0.1",
 )
 
 
@@ -64,7 +64,7 @@ async def metadata():
             "Payment Operations Incident Response environment. "
             "An AI agent reviews financial transactions and decides how to handle them."
         ),
-        "version": "2.0.0",
+        "version": "2.0.1",
     }
 
 
@@ -582,7 +582,7 @@ async def health():
     return {
         "status": "healthy",
         "environment": "payops_env",
-        "version": "2.0.0",
+        "version": "2.0.1",
         "episode_id": episode_id,
         "episode_seed": episode_seed,
         "current_task_id": current_task,
