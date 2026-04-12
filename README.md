@@ -12,6 +12,7 @@ tags:
   - compliance
   - reinforcement-learning
 pinned: false
+fullWidth: false
 ---
 
 # PayOps — Payment Operations Incident Response
