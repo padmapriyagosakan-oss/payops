@@ -24,8 +24,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project source
 COPY . /app/payops_env
 
-# Put parent directory on PYTHONPATH so `payops_env` is importable
-ENV PYTHONPATH="/app"
+# Both /app (for payops_env.*) and /app/payops_env (for server.*) on PYTHONPATH
+# This matches the openenv.yaml app: server.app:app path and platform example format
+ENV PYTHONPATH="/app:/app/payops_env"
 
 # HuggingFace Spaces requires port 7860; default to 7860
 ENV PORT=7860
@@ -45,5 +46,5 @@ EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
-CMD ["sh", "-c", "uvicorn payops_env.server.app:app --host 0.0.0.0 --port ${PORT} --workers 1"]
+CMD ["sh", "-c", "uvicorn server.app:app --host 0.0.0.0 --port ${PORT} --workers 1"]
 

@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-server = "payops_env.server.app:main"
+server = "server.app:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -27,4 +27,4 @@ include = ["payops_env*"]
 [tool.openenv]
 name = "payops_env"
 type = "space"
-app = "payops_env.server.app:app"
+app = "server.app:app"
