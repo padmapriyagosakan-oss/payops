@@ -229,14 +229,21 @@ async def schema():
     }
 
 
+def _grader_ref(task_id: str) -> str:
+    """Return the dotted grader reference string for a task id, e.g. 'server.graders:EASY001Grader'."""
+    return f"server.graders:{task_id.replace('-', '')}Grader"
+
+
 @app.get("/tasks", summary="List all available tasks")
 async def tasks():
-    """Return metadata for all tasks grouped by difficulty."""
+    """Return a flat list of task metadata (one dict per task)."""
     result = []
     for t in TASKS:
         result.append(
             {
+                "id":              t.task_id,
                 "task_id":         t.task_id,
+                "name":            t.task_id,
                 "difficulty":      t.difficulty,
                 "description":     t.description,
                 "transaction_id":  t.transaction_id,
@@ -250,18 +257,10 @@ async def tasks():
                 "requires_investigation": list(getattr(t, "requires_investigation", [])),
                 "regulatory_action": getattr(t, "regulatory_action", False),
                 "chain_total":     getattr(t, "chain_total", 1),
-                "grader": {
-                    "enabled":               True,
-                    "type":                  "action_match",
-                    "correct_action":        t.correct_action,
-                    "partial_credit":        dict(getattr(t, "partial_credit_actions", {})),
-                    "requires_investigation": list(getattr(t, "requires_investigation", [])),
-                    "regulatory_action":     getattr(t, "regulatory_action", False),
-                    "key_flags":             list(getattr(t, "key_flags", [])),
-                },
+                "grader":          _grader_ref(t.task_id),
             }
         )
-    return {"count": len(result), "tasks": result}
+    return result
 
 
 @app.get("/grader", summary="Grade the current episode")
@@ -287,15 +286,7 @@ async def grader():
                     {
                         "task_id":   t.task_id,
                         "difficulty": t.difficulty,
-                        "grader": {
-                            "enabled":               True,
-                            "type":                  "action_match",
-                            "correct_action":        t.correct_action,
-                            "partial_credit":        dict(getattr(t, "partial_credit_actions", {})),
-                            "requires_investigation": list(getattr(t, "requires_investigation", [])),
-                            "regulatory_action":     getattr(t, "regulatory_action", False),
-                            "key_flags":             list(getattr(t, "key_flags", [])),
-                        },
+                        "grader":    _grader_ref(t.task_id),
                     }
                     for t in TASKS
                 ],
@@ -304,15 +295,7 @@ async def grader():
                     {
                         "task_id":   t.task_id,
                         "difficulty": t.difficulty,
-                        "grader": {
-                            "enabled":               True,
-                            "type":                  "action_match",
-                            "correct_action":        t.correct_action,
-                            "partial_credit":        dict(getattr(t, "partial_credit_actions", {})),
-                            "requires_investigation": list(getattr(t, "requires_investigation", [])),
-                            "regulatory_action":     getattr(t, "regulatory_action", False),
-                            "key_flags":             list(getattr(t, "key_flags", [])),
-                        },
+                        "grader":    _grader_ref(t.task_id),
                     }
                     for t in TASKS
                 ],
@@ -337,15 +320,7 @@ async def grader():
         entry = dict(pt)
         t = tasks_by_id.get(pt["task_id"])
         if t:
-            entry["grader"] = {
-                "enabled":               True,
-                "type":                  "action_match",
-                "correct_action":        t.correct_action,
-                "partial_credit":        dict(getattr(t, "partial_credit_actions", {})),
-                "requires_investigation": list(getattr(t, "requires_investigation", [])),
-                "regulatory_action":     getattr(t, "regulatory_action", False),
-                "key_flags":             list(getattr(t, "key_flags", [])),
-            }
+            entry["grader"] = _grader_ref(t.task_id)
         per_task.append(entry)
 
     return {

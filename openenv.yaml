@@ -5,126 +5,154 @@ runtime: fastapi
 app: server.app:app
 port: 7860
 version: 2.0.0
-
 tasks:
-  - id: EASY-001
-    name: EASY-001
-    difficulty: easy
-    grader: server.graders:EASY001Grader
-  - id: EASY-002
-    name: EASY-002
-    difficulty: easy
-    grader: server.graders:EASY002Grader
-  - id: EASY-003
-    name: EASY-003
-    difficulty: easy
-    grader: server.graders:EASY003Grader
-  - id: EASY-004
-    name: EASY-004
-    difficulty: easy
-    grader: server.graders:EASY004Grader
-  - id: EASY-005
-    name: EASY-005
-    difficulty: easy
-    grader: server.graders:EASY005Grader
-  - id: EASY-006
-    name: EASY-006
-    difficulty: easy
-    grader: server.graders:EASY006Grader
-  - id: MED-001
-    name: MED-001
-    difficulty: medium
-    grader: server.graders:MED001Grader
-  - id: MED-002
-    name: MED-002
-    difficulty: medium
-    grader: server.graders:MED002Grader
-  - id: MED-003
-    name: MED-003
-    difficulty: medium
-    grader: server.graders:MED003Grader
-  - id: MED-004
-    name: MED-004
-    difficulty: medium
-    grader: server.graders:MED004Grader
-  - id: MED-005
-    name: MED-005
-    difficulty: medium
-    grader: server.graders:MED005Grader
-  - id: MED-006
-    name: MED-006
-    difficulty: medium
-    grader: server.graders:MED006Grader
-  - id: MED-007
-    name: MED-007
-    difficulty: medium
-    grader: server.graders:MED007Grader
-  - id: MED-008
-    name: MED-008
-    difficulty: medium
-    grader: server.graders:MED008Grader
-  - id: HARD-001
-    name: HARD-001
-    difficulty: hard
-    grader: server.graders:HARD001Grader
-  - id: HARD-002
-    name: HARD-002
-    difficulty: hard
-    grader: server.graders:HARD002Grader
-  - id: HARD-003
-    name: HARD-003
-    difficulty: hard
-    grader: server.graders:HARD003Grader
-  - id: HARD-004
-    name: HARD-004
-    difficulty: hard
-    grader: server.graders:HARD004Grader
-  - id: HARD-005
-    name: HARD-005
-    difficulty: hard
-    grader: server.graders:HARD005Grader
-  - id: HARD-006
-    name: HARD-006
-    difficulty: hard
-    grader: server.graders:HARD006Grader
-  - id: HARD-007
-    name: HARD-007
-    difficulty: hard
-    grader: server.graders:HARD007Grader
-  - id: HARD-008
-    name: HARD-008
-    difficulty: hard
-    grader: server.graders:HARD008Grader
-  - id: HARD-009
-    name: HARD-009
-    difficulty: hard
-    grader: server.graders:HARD009Grader
-  - id: HARD-010
-    name: HARD-010
-    difficulty: hard
-    grader: server.graders:HARD010Grader
-  - id: CRIT-001
-    name: CRIT-001
-    difficulty: critical
-    grader: server.graders:CRIT001Grader
-  - id: CRIT-002
-    name: CRIT-002
-    difficulty: critical
-    grader: server.graders:CRIT002Grader
-  - id: CRIT-003
-    name: CRIT-003
-    difficulty: critical
-    grader: server.graders:CRIT003Grader
-  - id: CRIT-004
-    name: CRIT-004
-    difficulty: critical
-    grader: server.graders:CRIT004Grader
-  - id: CRIT-005
-    name: CRIT-005
-    difficulty: critical
-    grader: server.graders:CRIT005Grader
-  - id: CRIT-006
-    name: CRIT-006
-    difficulty: critical
-    grader: server.graders:CRIT006Grader
-
+- id: EASY-001
+  task_id: EASY-001
+  name: EASY-001
+  difficulty: easy
+  grader: server.graders:EASY001Grader
+- id: EASY-002
+  task_id: EASY-002
+  name: EASY-002
+  difficulty: easy
+  grader: server.graders:EASY002Grader
+- id: EASY-003
+  task_id: EASY-003
+  name: EASY-003
+  difficulty: easy
+  grader: server.graders:EASY003Grader
+- id: EASY-004
+  task_id: EASY-004
+  name: EASY-004
+  difficulty: easy
+  grader: server.graders:EASY004Grader
+- id: EASY-005
+  task_id: EASY-005
+  name: EASY-005
+  difficulty: easy
+  grader: server.graders:EASY005Grader
+- id: EASY-006
+  task_id: EASY-006
+  name: EASY-006
+  difficulty: easy
+  grader: server.graders:EASY006Grader
+- id: MED-001
+  task_id: MED-001
+  name: MED-001
+  difficulty: medium
+  grader: server.graders:MED001Grader
+- id: MED-002
+  task_id: MED-002
+  name: MED-002
+  difficulty: medium
+  grader: server.graders:MED002Grader
+- id: MED-003
+  task_id: MED-003
+  name: MED-003
+  difficulty: medium
+  grader: server.graders:MED003Grader
+- id: MED-004
+  task_id: MED-004
+  name: MED-004
+  difficulty: medium
+  grader: server.graders:MED004Grader
+- id: MED-005
+  task_id: MED-005
+  name: MED-005
+  difficulty: medium
+  grader: server.graders:MED005Grader
+- id: MED-006
+  task_id: MED-006
+  name: MED-006
+  difficulty: medium
+  grader: server.graders:MED006Grader
+- id: MED-007
+  task_id: MED-007
+  name: MED-007
+  difficulty: medium
+  grader: server.graders:MED007Grader
+- id: MED-008
+  task_id: MED-008
+  name: MED-008
+  difficulty: medium
+  grader: server.graders:MED008Grader
+- id: HARD-001
+  task_id: HARD-001
+  name: HARD-001
+  difficulty: hard
+  grader: server.graders:HARD001Grader
+- id: HARD-002
+  task_id: HARD-002
+  name: HARD-002
+  difficulty: hard
+  grader: server.graders:HARD002Grader
+- id: HARD-003
+  task_id: HARD-003
+  name: HARD-003
+  difficulty: hard
+  grader: server.graders:HARD003Grader
+- id: HARD-004
+  task_id: HARD-004
+  name: HARD-004
+  difficulty: hard
+  grader: server.graders:HARD004Grader
+- id: HARD-005
+  task_id: HARD-005
+  name: HARD-005
+  difficulty: hard
+  grader: server.graders:HARD005Grader
+- id: HARD-006
+  task_id: HARD-006
+  name: HARD-006
+  difficulty: hard
+  grader: server.graders:HARD006Grader
+- id: HARD-007
+  task_id: HARD-007
+  name: HARD-007
+  difficulty: hard
+  grader: server.graders:HARD007Grader
+- id: HARD-008
+  task_id: HARD-008
+  name: HARD-008
+  difficulty: hard
+  grader: server.graders:HARD008Grader
+- id: HARD-009
+  task_id: HARD-009
+  name: HARD-009
+  difficulty: hard
+  grader: server.graders:HARD009Grader
+- id: HARD-010
+  task_id: HARD-010
+  name: HARD-010
+  difficulty: hard
+  grader: server.graders:HARD010Grader
+- id: CRIT-001
+  task_id: CRIT-001
+  name: CRIT-001
+  difficulty: critical
+  grader: server.graders:CRIT001Grader
+- id: CRIT-002
+  task_id: CRIT-002
+  name: CRIT-002
+  difficulty: critical
+  grader: server.graders:CRIT002Grader
+- id: CRIT-003
+  task_id: CRIT-003
+  name: CRIT-003
+  difficulty: critical
+  grader: server.graders:CRIT003Grader
+- id: CRIT-004
+  task_id: CRIT-004
+  name: CRIT-004
+  difficulty: critical
+  grader: server.graders:CRIT004Grader
+- id: CRIT-005
+  task_id: CRIT-005
+  name: CRIT-005
+  difficulty: critical
+  grader: server.graders:CRIT005Grader
+- id: CRIT-006
+  task_id: CRIT-006
+  name: CRIT-006
+  difficulty: critical
+  grader: server.graders:CRIT006Grader
