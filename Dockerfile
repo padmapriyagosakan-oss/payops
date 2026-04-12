@@ -8,7 +8,7 @@
 FROM python:3.11-slim
 
 # Build trigger — change this to force HF Space Docker rebuild
-LABEL build.version="2026-04-12-v5"
+LABEL build.version="2026-04-12-v6"
 
 # Non-root user for security
 RUN useradd -m -u 1000 appuser
@@ -29,6 +29,9 @@ COPY . /app/payops_env
 
 # Also copy openenv.yaml to WORKDIR so validators can find it at /app/openenv.yaml
 COPY openenv.yaml /app/openenv.yaml
+
+# Copy graders.py to /app so platform can `import graders` from /app on PYTHONPATH
+COPY graders.py /app/graders.py
 
 # Both /app (for payops_env.*) and /app/payops_env (for server.*) on PYTHONPATH
 # This matches the openenv.yaml app: server.app:app path and platform example format

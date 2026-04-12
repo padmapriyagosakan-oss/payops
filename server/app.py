@@ -272,8 +272,8 @@ async def schema():
 
 
 def _grader_ref(task_id: str) -> str:
-    """Return the dotted grader reference string for a task id, e.g. 'server.graders:EASY001Grader'."""
-    return f"server.graders:{task_id.replace('-', '')}Grader"
+    """Return the dotted grader reference string for a task id, e.g. 'graders:EASY001Grader'."""
+    return f"graders:{task_id.replace('-', '')}Grader"
 
 
 def _clamp_score(v: float) -> float:
@@ -614,7 +614,7 @@ async def health():
             processed  = 0
             total      = len(TASKS)
     return {
-        "status": "ok",
+        "status": "healthy",
         "environment": "payops_env",
         "version": _APP_VERSION,
         "episode_id": episode_id,
