@@ -55,6 +55,19 @@ async def root():
     return {"status": "ok", "app": "payops_env"}
 
 
+@app.get("/metadata")
+async def metadata():
+    """Environment metadata — mirrors the openenv create_app /metadata endpoint."""
+    return {
+        "name": "payops_env",
+        "description": (
+            "Payment Operations Incident Response environment. "
+            "An AI agent reviews financial transactions and decides how to handle them."
+        ),
+        "version": "2.0.0",
+    }
+
+
 # Per-session environment instances — one per /reset call.
 # Keyed by episode_id; keeps the last _MAX_SESSIONS sessions to bound memory.
 _MAX_SESSIONS = 20
@@ -549,7 +562,7 @@ async def health():
             processed  = 0
             total      = len(TASKS)
     return {
-        "status": "ok",
+        "status": "healthy",
         "environment": "payops_env",
         "version": "2.0.0",
         "episode_id": episode_id,

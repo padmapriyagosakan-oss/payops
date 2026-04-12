@@ -54,11 +54,12 @@ except ImportError:
 
 API_BASE_URL: str    = (os.environ.get("API_BASE_URL") or "https://router.huggingface.co/v1").rstrip("/")
 MODEL_NAME: str      = os.environ.get("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
-# OPENAI_API_KEY is the spec-standard credential; HF_TOKEN is the HF-native alias.
-# OPENAI_API_KEY takes precedence when both are set.
-OPENAI_API_KEY: str  = os.environ.get("OPENAI_API_KEY", "")
-HF_TOKEN: str        = os.environ.get("HF_TOKEN", "")
+# HF_TOKEN is mandatory per competition spec.
+HF_TOKEN: str        = os.environ.get("HF_TOKEN") or ""
+OPENAI_API_KEY: str  = os.environ.get("OPENAI_API_KEY") or ""
 _API_KEY: str        = OPENAI_API_KEY or HF_TOKEN   # resolved credential
+if not _API_KEY:
+    raise ValueError("HF_TOKEN environment variable must be set")
 PAYOPS_URL: str      = os.environ.get("PAYOPS_BASE_URL", "http://localhost:7860").rstrip("/")
 # Fixed seed keeps per-episode amount/risk jitter deterministic across runs.
 # Override with INFERENCE_SEED=<int> or INFERENCE_SEED=random for a fresh episode.
@@ -90,9 +91,9 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}", flush=True)
 
 
-def log_end(success: bool, steps: int, score: float, rewards: list) -> None:
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+def log_end(success: bool, steps: int, rewards: list, **_kw: object) -> None:
+    rewards_str = "[" + ", ".join(f"{r:.2f}" for r in rewards) + "]"
+    print(f"[END] success={success} steps={steps} rewards={rewards_str}", flush=True)
 
 SYSTEM_PROMPT = """You are a Payment Operations analyst reviewing financial transactions.
 
@@ -394,18 +395,16 @@ if __name__ == "__main__":
     import traceback
     _rewards: list = []
     _steps   = 0
-    _score   = 0.0
     _success = False
     try:
         log_start(task=TASK_NAME, env=ENV_NAME, model=MODEL_NAME)
         result, _rewards, _steps = run_inference()
-        _score   = result.get("normalised_score", 0.0)
         _success = result.get("passed", False)
     except Exception as exc:
         print(f"[ERROR] Fatal exception in inference.py:", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
     finally:
-        log_end(success=_success, steps=_steps, score=_score, rewards=_rewards)
+        log_end(success=_success, steps=_steps, rewards=_rewards)
     # Always exit 0 — non-zero exit is interpreted by the evaluator as a crash.
     # Agent performance is communicated through the grader score in log_end.
     sys.exit(0)
