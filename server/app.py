@@ -48,6 +48,13 @@ app = FastAPI(
     version="2.0.0",
 )
 
+
+@app.get("/", include_in_schema=False)
+async def root():
+    """Root liveness endpoint for HF Spaces readiness checks."""
+    return {"status": "ok", "app": "payops_env"}
+
+
 # Per-session environment instances — one per /reset call.
 # Keyed by episode_id; keeps the last _MAX_SESSIONS sessions to bound memory.
 _MAX_SESSIONS = 20
