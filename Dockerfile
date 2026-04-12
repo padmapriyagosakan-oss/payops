@@ -24,6 +24,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project source
 COPY . /app/payops_env
 
+# Also copy openenv.yaml to WORKDIR so validators can find it at /app/openenv.yaml
+COPY openenv.yaml /app/openenv.yaml
+
 # Both /app (for payops_env.*) and /app/payops_env (for server.*) on PYTHONPATH
 # This matches the openenv.yaml app: server.app:app path and platform example format
 ENV PYTHONPATH="/app:/app/payops_env"
