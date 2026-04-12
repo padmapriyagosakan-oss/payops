@@ -7,9 +7,22 @@ Each grader is fully self-contained (zero external imports) so the platform
 validator can import and call them in any isolated environment.
 
 Returns {"score": float, "feedback": str} as required by the platform.
-Scores are always in [0.0, 1.0].
+Scores are always strictly in (0, 1) — never exactly 0.0 or 1.0.
 """
 from __future__ import annotations
+
+# Platform requires scores strictly between 0 and 1 (exclusive).
+_SCORE_MIN = 0.001
+_SCORE_MAX = 0.999
+
+
+def _clamp(score: float) -> float:
+    """Clamp score to the open interval (0, 1)."""
+    if score <= 0.0:
+        return _SCORE_MIN
+    if score >= 1.0:
+        return _SCORE_MAX
+    return score
 
 
 class _BaseGrader:
@@ -26,11 +39,12 @@ class _BaseGrader:
 
     def grade(self, action: str, **kwargs):
         if action == self.correct_action:
-            return {"score": 1.0, "feedback": "Correct action"}
-        score = float(self.partial_credit.get(action, 0.0))
+            return {"score": _SCORE_MAX, "feedback": "Correct action"}
+        raw = float(self.partial_credit.get(action, 0.0))
+        score = _clamp(raw)
         return {
             "score": score,
-            "feedback": "Partial credit" if score > 0 else "Incorrect action",
+            "feedback": "Partial credit" if raw > 0 else "Incorrect action",
         }
 
     def __call__(self, action: str, **kwargs):

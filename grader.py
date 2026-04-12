@@ -334,8 +334,12 @@ def grade_episode(
         for t in tasks
     )
 
-    # Strict [0, 1] clamp — grader can NEVER exceed 1.0 or go below 0.0
-    normalised = max(0.0, min(1.0, total / max_possible)) if max_possible > 0 else 0.0
+    # Strict open interval (0, 1) — platform rejects exactly 0.0 and 1.0
+    if max_possible > 0:
+        normalised = total / max_possible
+        normalised = max(0.001, min(0.999, normalised))
+    else:
+        normalised = 0.001
 
     # Build per-task rewards with grader config included.
     # zip is safe because per_task_details always has exactly len(tasks) entries
