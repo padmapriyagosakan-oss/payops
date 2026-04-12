@@ -254,6 +254,15 @@ def _grader_ref(task_id: str) -> str:
     return f"server.graders:{task_id.replace('-', '')}Grader"
 
 
+def _clamp_score(v: float) -> float:
+    """Clamp any score to the open interval (0, 1) — platform rejects 0.0 and 1.0."""
+    if v <= 0.0:
+        return 0.001
+    if v >= 1.0:
+        return 0.999
+    return round(v, 4)
+
+
 @app.get("/tasks", summary="List all available tasks")
 async def tasks():
     """Return a flat list of task metadata (one dict per task)."""
@@ -278,6 +287,7 @@ async def tasks():
                 "regulatory_action": getattr(t, "regulatory_action", False),
                 "chain_total":     getattr(t, "chain_total", 1),
                 "grader":          _grader_ref(t.task_id),
+                "score":           0.5,
             }
         )
     return result
@@ -295,9 +305,9 @@ async def grader():
         # Build grader catalog (used when no session / no actions yet)
         def _catalog():
             return {
-                "total_reward":        0.0,
-                "max_possible_reward": 0.0,
-                "normalised_score":    0.0,
+                "total_reward":        0.001,
+                "max_possible_reward": 0.001,
+                "normalised_score":    0.001,
                 "budget_spent":        0.0,
                 "budget_overspend":    0.0,
                 "budget_penalty":      0.0,
@@ -307,6 +317,7 @@ async def grader():
                         "task_id":   t.task_id,
                         "difficulty": t.difficulty,
                         "grader":    _grader_ref(t.task_id),
+                        "score":     0.5,
                     }
                     for t in TASKS
                 ],
@@ -316,6 +327,7 @@ async def grader():
                         "task_id":   t.task_id,
                         "difficulty": t.difficulty,
                         "grader":    _grader_ref(t.task_id),
+                        "score":     0.5,
                     }
                     for t in TASKS
                 ],
@@ -341,12 +353,18 @@ async def grader():
         t = tasks_by_id.get(pt["task_id"])
         if t:
             entry["grader"] = _grader_ref(t.task_id)
+        # Platform requires a per-task "score" in the open interval (0, 1).
+        # Derive from weighted_reward normalised by difficulty weight, clamped.
+        raw = pt.get("weighted_reward", 0.0)
+        weight = pt.get("weight", 1.0) or 1.0
+        task_score = (raw / weight + 1.0) / 2.0  # map [-1, +1] → [0, 1]
+        entry["score"] = _clamp_score(task_score)
         per_task.append(entry)
 
     return {
         "total_reward":       result.total_reward,
         "max_possible_reward":result.max_possible_reward,
-        "normalised_score":   result.normalised_score,
+        "normalised_score":   _clamp_score(result.normalised_score),
         "budget_spent":       result.budget_spent,
         "budget_overspend":   result.budget_overspend,
         "budget_penalty":     result.budget_penalty,
