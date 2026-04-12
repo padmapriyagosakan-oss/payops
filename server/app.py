@@ -614,7 +614,7 @@ async def health():
             processed  = 0
             total      = len(TASKS)
     return {
-        "status": "healthy",
+        "status": "ok",
         "environment": "payops_env",
         "version": _APP_VERSION,
         "episode_id": episode_id,

@@ -7,158 +7,188 @@ port: 7860
 endpoints:
   reset: /reset
   step: /step
-  tasks: /tasks-v2
-  grader: /grader-v2
-  health: /health-v2
-  metadata: /metadata-v2
+  tasks: /tasks
+  grader: /grader
+  health: /health
+  metadata: /metadata
 tasks:
 - id: EASY-001
   task_id: EASY-001
   name: EASY-001
   difficulty: easy
   grader: server.graders:EASY001Grader
+  score: 0.5
 - id: EASY-002
   task_id: EASY-002
   name: EASY-002
   difficulty: easy
   grader: server.graders:EASY002Grader
+  score: 0.5
 - id: EASY-003
   task_id: EASY-003
   name: EASY-003
   difficulty: easy
   grader: server.graders:EASY003Grader
+  score: 0.5
 - id: EASY-004
   task_id: EASY-004
   name: EASY-004
   difficulty: easy
   grader: server.graders:EASY004Grader
+  score: 0.5
 - id: EASY-005
   task_id: EASY-005
   name: EASY-005
   difficulty: easy
   grader: server.graders:EASY005Grader
+  score: 0.5
 - id: EASY-006
   task_id: EASY-006
   name: EASY-006
   difficulty: easy
   grader: server.graders:EASY006Grader
+  score: 0.5
 - id: MED-001
   task_id: MED-001
   name: MED-001
   difficulty: medium
   grader: server.graders:MED001Grader
+  score: 0.5
 - id: MED-002
   task_id: MED-002
   name: MED-002
   difficulty: medium
   grader: server.graders:MED002Grader
+  score: 0.5
 - id: MED-003
   task_id: MED-003
   name: MED-003
   difficulty: medium
   grader: server.graders:MED003Grader
+  score: 0.5
 - id: MED-004
   task_id: MED-004
   name: MED-004
   difficulty: medium
   grader: server.graders:MED004Grader
+  score: 0.5
 - id: MED-005
   task_id: MED-005
   name: MED-005
   difficulty: medium
   grader: server.graders:MED005Grader
+  score: 0.5
 - id: MED-006
   task_id: MED-006
   name: MED-006
   difficulty: medium
   grader: server.graders:MED006Grader
+  score: 0.5
 - id: MED-007
   task_id: MED-007
   name: MED-007
   difficulty: medium
   grader: server.graders:MED007Grader
+  score: 0.5
 - id: MED-008
   task_id: MED-008
   name: MED-008
   difficulty: medium
   grader: server.graders:MED008Grader
+  score: 0.5
 - id: HARD-001
   task_id: HARD-001
   name: HARD-001
   difficulty: hard
   grader: server.graders:HARD001Grader
+  score: 0.5
 - id: HARD-002
   task_id: HARD-002
   name: HARD-002
   difficulty: hard
   grader: server.graders:HARD002Grader
+  score: 0.5
 - id: HARD-003
   task_id: HARD-003
   name: HARD-003
   difficulty: hard
   grader: server.graders:HARD003Grader
+  score: 0.5
 - id: HARD-004
   task_id: HARD-004
   name: HARD-004
   difficulty: hard
   grader: server.graders:HARD004Grader
+  score: 0.5
 - id: HARD-005
   task_id: HARD-005
   name: HARD-005
   difficulty: hard
   grader: server.graders:HARD005Grader
+  score: 0.5
 - id: HARD-006
   task_id: HARD-006
   name: HARD-006
   difficulty: hard
   grader: server.graders:HARD006Grader
+  score: 0.5
 - id: HARD-007
   task_id: HARD-007
   name: HARD-007
   difficulty: hard
   grader: server.graders:HARD007Grader
+  score: 0.5
 - id: HARD-008
   task_id: HARD-008
   name: HARD-008
   difficulty: hard
   grader: server.graders:HARD008Grader
+  score: 0.5
 - id: HARD-009
   task_id: HARD-009
   name: HARD-009
   difficulty: hard
   grader: server.graders:HARD009Grader
+  score: 0.5
 - id: HARD-010
   task_id: HARD-010
   name: HARD-010
   difficulty: hard
   grader: server.graders:HARD010Grader
+  score: 0.5
 - id: CRIT-001
   task_id: CRIT-001
   name: CRIT-001
   difficulty: critical
   grader: server.graders:CRIT001Grader
+  score: 0.5
 - id: CRIT-002
   task_id: CRIT-002
   name: CRIT-002
   difficulty: critical
   grader: server.graders:CRIT002Grader
+  score: 0.5
 - id: CRIT-003
   task_id: CRIT-003
   name: CRIT-003
   difficulty: critical
   grader: server.graders:CRIT003Grader
+  score: 0.5
 - id: CRIT-004
   task_id: CRIT-004
   name: CRIT-004
   difficulty: critical
   grader: server.graders:CRIT004Grader
+  score: 0.5
 - id: CRIT-005
   task_id: CRIT-005
   name: CRIT-005
   difficulty: critical
   grader: server.graders:CRIT005Grader
+  score: 0.5
 - id: CRIT-006
   task_id: CRIT-006
   name: CRIT-006
   difficulty: critical
   grader: server.graders:CRIT006Grader
+  score: 0.5

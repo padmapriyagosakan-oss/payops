@@ -37,7 +37,9 @@ class _BaseGrader:
     correct_action: str = ""
     partial_credit: dict = {}
 
-    def grade(self, action: str, **kwargs):
+    def grade(self, action: str = "", **kwargs):
+        if not action:
+            return {"score": 0.5, "feedback": "No action provided"}
         if action == self.correct_action:
             return {"score": _SCORE_MAX, "feedback": "Correct action"}
         raw = float(self.partial_credit.get(action, 0.0))
@@ -47,8 +49,9 @@ class _BaseGrader:
             "feedback": "Partial credit" if raw > 0 else "Incorrect action",
         }
 
-    def __call__(self, action: str, **kwargs):
-        return self.grade(action, **kwargs)
+    def __call__(self, *args, **kwargs):
+        action = args[0] if args else kwargs.get("action", "")
+        return self.grade(action, **{k: v for k, v in kwargs.items() if k != "action"})
 
 
 # ── Easy ─────────────────────────────────────────────────────────────────────

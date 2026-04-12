@@ -8,7 +8,7 @@
 FROM python:3.11-slim
 
 # Build trigger — change this to force HF Space Docker rebuild
-LABEL build.version="2026-04-12-v4"
+LABEL build.version="2026-04-12-v5"
 
 # Non-root user for security
 RUN useradd -m -u 1000 appuser
