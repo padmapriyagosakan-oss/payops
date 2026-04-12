@@ -25,7 +25,7 @@ import time
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
@@ -45,8 +45,24 @@ app = FastAPI(
         "Payment Operations Incident Response environment. "
         "An AI agent reviews financial transactions and decides how to handle them."
     ),
-    version="2.0.1",
+    version="2.0.2",
 )
+
+_APP_VERSION = "2.0.2"
+_NO_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
+
+@app.middleware("http")
+async def disable_cache_for_validator_paths(request: Request, call_next):
+    """Prevent stale validator responses from being served from caches."""
+    response = await call_next(request)
+    if request.method in {"GET", "HEAD"}:
+        response.headers.update(_NO_CACHE_HEADERS)
+    return response
 
 
 @app.get("/", include_in_schema=False)
@@ -64,8 +80,14 @@ async def metadata():
             "Payment Operations Incident Response environment. "
             "An AI agent reviews financial transactions and decides how to handle them."
         ),
-        "version": "2.0.1",
+        "version": _APP_VERSION,
     }
+
+
+@app.get("/metadata-v2")
+async def metadata_v2():
+    """Versioned metadata alias used to bypass stale edge caches."""
+    return await metadata()
 
 
 # Per-session environment instances — one per /reset call.
@@ -293,6 +315,12 @@ async def tasks():
     return result
 
 
+@app.get("/tasks-v2", summary="List all available tasks")
+async def tasks_v2():
+    """Versioned tasks alias used to bypass stale edge caches."""
+    return await tasks()
+
+
 @app.get("/grader", summary="Grade the current episode")
 async def grader():
     """
@@ -372,6 +400,12 @@ async def grader():
         "per_task":           per_task,
         "per_task_rewards":   per_task,
     }
+
+
+@app.get("/grader-v2", summary="Grade the current episode")
+async def grader_v2():
+    """Versioned grader alias used to bypass stale edge caches."""
+    return await grader()
 
 
 @app.post("/baseline", response_model=BaselineResult, summary="Run the baseline agent")
@@ -582,13 +616,19 @@ async def health():
     return {
         "status": "healthy",
         "environment": "payops_env",
-        "version": "2.0.1",
+        "version": _APP_VERSION,
         "episode_id": episode_id,
         "episode_seed": episode_seed,
         "current_task_id": current_task,
         "transactions_processed": processed,
         "total_tasks": total,
     }
+
+
+@app.get("/health-v2", summary="Health check")
+async def health_v2():
+    """Versioned health alias used to bypass stale edge caches."""
+    return await health()
 
 
 # ---------------------------------------------------------------------------

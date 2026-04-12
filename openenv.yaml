@@ -4,6 +4,13 @@ type: space
 runtime: fastapi
 app: server.app:app
 port: 7860
+endpoints:
+  reset: /reset
+  step: /step
+  tasks: /tasks-v2
+  grader: /grader-v2
+  health: /health-v2
+  metadata: /metadata-v2
 tasks:
 - id: EASY-001
   task_id: EASY-001

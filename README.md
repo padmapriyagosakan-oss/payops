@@ -13,7 +13,7 @@ tags:
   - reinforcement-learning
 pinned: false
 fullWidth: false
-build_version: 2026-04-12-v3
+build_version: 2026-04-12-v4
 ---
 
 # PayOps — Payment Operations Incident Response
