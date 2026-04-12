@@ -1,85 +1,162 @@
 """
 Grader callables for PayOps OpenEnv tasks.
 
-Each class is referenced from openenv.yaml as:
-    server.graders:EASY001Grader
+Referenced from openenv.yaml as:  server.graders:EASY001Grader
 
-The platform imports the class and calls it with an action string.
-Return type is {"score": float, "feedback": str} as required by the platform validator.
+Each grader is fully self-contained (zero external imports) so the platform
+validator can import and call them in any isolated environment.
+
+Returns {"score": float, "feedback": str} as required by the platform.
+Scores are always in [0.0, 1.0].
 """
 from __future__ import annotations
 
 
 class _BaseGrader:
-    """Base grader: returns {"score": float, "feedback": str} as required by the platform validator."""
+    """
+    Self-contained base grader.
 
-    task_id: str = ""
+    Subclasses set:
+      correct_action : str
+      partial_credit : dict[str, float]   (action -> score, all in (0, 1))
+    """
+
+    correct_action: str = ""
+    partial_credit: dict = {}
 
     def grade(self, action: str, **kwargs):
-        from payops_env.tasks import TASKS_BY_ID  # lazy import avoids circular deps
-
-        t = TASKS_BY_ID.get(self.task_id)
-        if t is None:
-            return {"score": 0.0, "feedback": "Task not found"}
-
-        if action == t.correct_action:
+        if action == self.correct_action:
             return {"score": 1.0, "feedback": "Correct action"}
-
-        partial = float(
-            dict(getattr(t, "partial_credit_actions", {})).get(action, 0.0)
-        )
+        score = float(self.partial_credit.get(action, 0.0))
         return {
-            "score": partial,
-            "feedback": "Partial credit" if partial > 0 else "Incorrect action",
+            "score": score,
+            "feedback": "Partial credit" if score > 0 else "Incorrect action",
         }
 
     def __call__(self, action: str, **kwargs):
         return self.grade(action, **kwargs)
 
 
-def _make(task_id: str) -> type:
-    """Factory: create a named grader class for the given task_id."""
-    return type(
-        task_id.replace("-", "") + "Grader",
-        (_BaseGrader,),
-        {"task_id": task_id},
-    )
-
-
 # ── Easy ─────────────────────────────────────────────────────────────────────
-EASY001Grader = _make("EASY-001")  # approve
-EASY002Grader = _make("EASY-002")  # reject
-EASY003Grader = _make("EASY-003")  # approve
-EASY004Grader = _make("EASY-004")  # flag
-EASY005Grader = _make("EASY-005")  # approve
-EASY006Grader = _make("EASY-006")  # flag
+class EASY001Grader(_BaseGrader):
+    correct_action = "approve"
+    partial_credit = {}
+
+class EASY002Grader(_BaseGrader):
+    correct_action = "reject"
+    partial_credit = {"escalate": 0.4}
+
+class EASY003Grader(_BaseGrader):
+    correct_action = "approve"
+    partial_credit = {}
+
+class EASY004Grader(_BaseGrader):
+    correct_action = "flag"
+    partial_credit = {"escalate": 0.6, "hold": 0.5}
+
+class EASY005Grader(_BaseGrader):
+    correct_action = "approve"
+    partial_credit = {}
+
+class EASY006Grader(_BaseGrader):
+    correct_action = "flag"
+    partial_credit = {"hold": 0.6}
 
 # ── Medium ────────────────────────────────────────────────────────────────────
-MED001Grader = _make("MED-001")   # escalate
-MED002Grader = _make("MED-002")   # hold
-MED003Grader = _make("MED-003")   # flag
-MED004Grader = _make("MED-004")   # flag
-MED005Grader = _make("MED-005")   # hold
-MED006Grader = _make("MED-006")   # escalate
-MED007Grader = _make("MED-007")   # hold
-MED008Grader = _make("MED-008")   # flag
+class MED001Grader(_BaseGrader):
+    correct_action = "escalate"
+    partial_credit = {"flag": 0.5, "hold": 0.4}
+
+class MED002Grader(_BaseGrader):
+    correct_action = "hold"
+    partial_credit = {"escalate": 0.6, "flag": 0.4}
+
+class MED003Grader(_BaseGrader):
+    correct_action = "flag"
+    partial_credit = {"hold": 0.5, "escalate": 0.3}
+
+class MED004Grader(_BaseGrader):
+    correct_action = "flag"
+    partial_credit = {"escalate": 0.5, "hold": 0.4}
+
+class MED005Grader(_BaseGrader):
+    correct_action = "hold"
+    partial_credit = {"flag": 0.5, "escalate": 0.4}
+
+class MED006Grader(_BaseGrader):
+    correct_action = "escalate"
+    partial_credit = {"flag": 0.4, "hold": 0.5}
+
+class MED007Grader(_BaseGrader):
+    correct_action = "hold"
+    partial_credit = {"escalate": 0.6, "flag": 0.4}
+
+class MED008Grader(_BaseGrader):
+    correct_action = "flag"
+    partial_credit = {"hold": 0.6, "escalate": 0.4}
 
 # ── Hard ──────────────────────────────────────────────────────────────────────
-HARD001Grader = _make("HARD-001")  # escalate
-HARD002Grader = _make("HARD-002")  # reject
-HARD003Grader = _make("HARD-003")  # reject
-HARD004Grader = _make("HARD-004")  # approve
-HARD005Grader = _make("HARD-005")  # escalate
-HARD006Grader = _make("HARD-006")  # flag
-HARD007Grader = _make("HARD-007")  # reject
-HARD008Grader = _make("HARD-008")  # reject
-HARD009Grader = _make("HARD-009")  # escalate
-HARD010Grader = _make("HARD-010")  # reject
+class HARD001Grader(_BaseGrader):
+    correct_action = "escalate"
+    partial_credit = {"flag": 0.6, "hold": 0.5, "reject": 0.3}
+
+class HARD002Grader(_BaseGrader):
+    correct_action = "reject"
+    partial_credit = {"escalate": 0.6, "hold": 0.5, "flag": 0.3}
+
+class HARD003Grader(_BaseGrader):
+    correct_action = "reject"
+    partial_credit = {"escalate": 0.5, "flag": 0.2}
+
+class HARD004Grader(_BaseGrader):
+    correct_action = "approve"
+    partial_credit = {"escalate": 0.5, "hold": 0.4, "flag": 0.3}
+
+class HARD005Grader(_BaseGrader):
+    correct_action = "escalate"
+    partial_credit = {"flag": 0.5, "hold": 0.4, "reject": 0.3}
+
+class HARD006Grader(_BaseGrader):
+    correct_action = "flag"
+    partial_credit = {"hold": 0.6, "escalate": 0.5}
+
+class HARD007Grader(_BaseGrader):
+    correct_action = "reject"
+    partial_credit = {"hold": 0.5, "escalate": 0.4, "flag": 0.3}
+
+class HARD008Grader(_BaseGrader):
+    correct_action = "reject"
+    partial_credit = {"hold": 0.5, "escalate": 0.4, "flag": 0.3}
+
+class HARD009Grader(_BaseGrader):
+    correct_action = "escalate"
+    partial_credit = {"hold": 0.5, "flag": 0.4, "reject": 0.3}
+
+class HARD010Grader(_BaseGrader):
+    correct_action = "reject"
+    partial_credit = {"hold": 0.5, "escalate": 0.4, "flag": 0.3}
 
 # ── Critical ──────────────────────────────────────────────────────────────────
-CRIT001Grader = _make("CRIT-001")  # approve
-CRIT002Grader = _make("CRIT-002")  # reject
-CRIT003Grader = _make("CRIT-003")  # escalate
-CRIT004Grader = _make("CRIT-004")  # reject
-CRIT005Grader = _make("CRIT-005")  # reject
-CRIT006Grader = _make("CRIT-006")  # escalate
+class CRIT001Grader(_BaseGrader):
+    correct_action = "approve"
+    partial_credit = {"escalate": 0.5, "hold": 0.4, "flag": 0.3}
+
+class CRIT002Grader(_BaseGrader):
+    correct_action = "reject"
+    partial_credit = {"escalate": 0.4, "flag": 0.2}
+
+class CRIT003Grader(_BaseGrader):
+    correct_action = "escalate"
+    partial_credit = {"flag": 0.4, "hold": 0.35, "reject": 0.3}
+
+class CRIT004Grader(_BaseGrader):
+    correct_action = "reject"
+    partial_credit = {"escalate": 0.5, "hold": 0.4}
+
+class CRIT005Grader(_BaseGrader):
+    correct_action = "reject"
+    partial_credit = {"escalate": 0.5, "hold": 0.4}
+
+class CRIT006Grader(_BaseGrader):
+    correct_action = "escalate"
+    partial_credit = {"hold": 0.5, "reject": 0.4}
